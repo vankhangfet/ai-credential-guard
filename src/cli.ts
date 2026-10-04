@@ -1,11 +1,13 @@
 export async function runCli(argv: string[], input: string): Promise<number> {
-  const command = argv[0] ?? "help";
+  const command = argv[0];
   switch (command) {
     case "version":
       console.log("ai-guard 0.1.0");
       return 0;
     default:
-      console.error("ai-guard: unknown or unimplemented command: " + command);
+      console.error(
+        "ai-guard: unknown or missing command. usage: ai-guard <init|check-prompt|check-file|allow|doctor|self-test|uninstall|version>"
+      );
       return 1;
   }
 }

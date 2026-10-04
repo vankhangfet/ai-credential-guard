@@ -8,7 +8,7 @@
   "files": ["dist", "templates"],
   "engines": { "node": ">=18" },
   "scripts": {
-    "build": "tsc && node dist/scripts/export-rules.js",
+    "build": "tsc",
     "test": "vitest run",
     "prepare": "npm run build"
   },
