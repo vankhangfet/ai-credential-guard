@@ -1,0 +1,20 @@
+{
+  "name": "ai-guard",
+  "version": "0.1.0",
+  "description": "Prevent credentials from leaking to AI coding tools (prompt + file hooks)",
+  "type": "commonjs",
+  "license": "MIT",
+  "bin": { "ai-guard": "dist/cli.js" },
+  "files": ["dist", "templates"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build": "tsc && node dist/scripts/export-rules.js",
+    "test": "vitest run",
+    "prepare": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
