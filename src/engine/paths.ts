@@ -9,6 +9,7 @@ export const DEFAULT_SENSITIVE_PATHS: string[] = [
 ];
 
 export function normalizePath(p: string): string {
+  // strip drive/../ để file NGOÀI project root (relative trả ../..) vẫn match pattern theo basename — fail-closed
   return p
     .replace(/\\/g, "/")
     .replace(/^[a-z]:/i, "")

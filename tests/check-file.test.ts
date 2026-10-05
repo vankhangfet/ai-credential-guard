@@ -29,6 +29,39 @@ describe("check-file argv path", () => {
     grantBypass(root, "file", "other.pem", 10);
     expect(await runCli(["check-file", "--root", root, "--tool", "claude-code", join(root, ".env")], "")).toBe(2);
   });
+  it("path là argv đầu tiên (không flag) -> vẫn chặn", async () => {
+    // không có --root: fallback là process.cwd(); chdir vào tmp root (có .ai-guard) để pin deterministically exit 2
+    const cwd = process.cwd();
+    process.chdir(root);
+    try {
+      expect(await runCli(["check-file", join(root, ".env")], "")).toBe(2);
+    } finally {
+      process.chdir(cwd);
+    }
+  });
+  it("argv path thắng stdin payload (precedence)", async () => {
+    writeFileSync(join(root, "readme.md"), "hi");
+    const payload = JSON.stringify({ tool_name: "Read", tool_input: { file_path: join(root, ".env") } });
+    expect(await runCli(["check-file", "--root", root, join(root, "readme.md")], payload)).toBe(0);
+  });
+  it("file ngoài root (../) vẫn chặn theo basename", async () => {
+    const outside = mkdtempSync(join(tmpdir(), "aig-out-"));
+    writeFileSync(join(outside, "leak.pem"), "x");
+    expect(await runCli(["check-file", "--root", root, join(outside, "leak.pem")], "")).toBe(2);
+  });
+  it("stderr chứa path + hướng dẫn allow", async () => {
+    const errSpy = process.stderr.write.bind(process.stderr);
+    let captured = "";
+    (process.stderr as any).write = (s: string) => { captured += s; return true; };
+    try {
+      await runCli(["check-file", "--root", root, "--tool", "claude-code", join(root, ".env")], "");
+    } finally {
+      (process.stderr as any).write = errSpy;
+    }
+    expect(captured).toContain("ai-guard");
+    expect(captured).toContain(".env");
+    expect(captured).toContain("allow file");
+  });
 });
 
 describe("check-file stdin payload (Claude Code PreToolUse)", () => {

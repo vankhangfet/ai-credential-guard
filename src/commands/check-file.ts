@@ -4,24 +4,21 @@ import { loadConfig } from "../engine/loader";
 import { isSensitivePath, normalizePath } from "../engine/paths";
 import { appendAuditEvent } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
-
-function flagValue(argv: string[], flag: string): string | undefined {
-  const i = argv.indexOf(flag);
-  return i >= 0 && argv[i + 1] !== undefined ? argv[i + 1] : undefined;
-}
+import { flagValue } from "../util/argv";
 
 function extractPath(argv: string[], input: string): string | null {
-  // argv: đối số cuối không bắt đầu bằng -- và không phải giá trị flag (path là positional)
+  // heuristic: loại giá trị của flag ra khỏi positional — các flag tương lai PHẢI nhận giá trị (dạng --flag value), flag boolean sẽ cần cập nhật đây
   const flagVals = new Set<string>();
   for (let i = 0; i < argv.length; i++) {
     if (argv[i].startsWith("--")) flagVals.add(argv[i + 1]);
   }
-  const positional = argv.filter((a, i) => i > 0 && !a.startsWith("--") && !flagVals.has(a));
+  const positional = argv.filter((a) => !a.startsWith("--") && !flagVals.has(a));
   if (positional.length) return positional[positional.length - 1];
   const s = input.trim();
   if (s.startsWith("{")) {
     try {
       const j = JSON.parse(s);
+      // v1: tool_input.path là thư mục (Grep/Glob base) chỉ chặn nếu chính tên thư mục match pattern; không liệt kê file con
       const ti = j?.tool_input ?? {};
       const p = [ti.file_path, ti.notebook_path, ti.path, j?.path].find((v) => typeof v === "string");
       return typeof p === "string" ? p : null;

@@ -3,6 +3,7 @@ import { scanText } from "../engine/scanner";
 import { appendAuditEvent } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { findProjectRoot } from "../root";
+import { flagValue } from "../util/argv";
 
 export function extractPrompt(input: string): string | null {
   const s = input.trim();
@@ -18,10 +19,9 @@ export function extractPrompt(input: string): string | null {
 }
 
 export async function checkPrompt(argv: string[], input: string): Promise<number> {
-  const rootIdx = argv.indexOf("--root");
-  const root = rootIdx >= 0 && argv[rootIdx + 1] !== undefined ? argv[rootIdx + 1] : process.cwd();
-  const toolIdx = argv.indexOf("--tool");
-  const tool = toolIdx >= 0 && argv[toolIdx + 1] !== undefined ? argv[toolIdx + 1] : "unknown";
+  const rootArg = flagValue(argv, "--root");
+  const root = rootArg !== undefined ? rootArg : process.cwd();
+  const tool = flagValue(argv, "--tool") ?? "unknown";
   const prompt = extractPrompt(input);
   if (!prompt) return 0;
   const projectRoot = findProjectRoot(root);
