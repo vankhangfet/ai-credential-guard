@@ -4,6 +4,8 @@ export async function runCli(argv: string[], input: string): Promise<number> {
     case "version":
       console.log("ai-guard 0.1.0");
       return 0;
+    case "check-prompt":
+      return (await import("./commands/check-prompt")).checkPrompt(argv.slice(1), input);
     default:
       console.error(
         "ai-guard: unknown or missing command. usage: ai-guard <init|check-prompt|check-file|allow|doctor|self-test|uninstall|version>"
