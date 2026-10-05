@@ -18,6 +18,25 @@ const cases: Array<[string, string, boolean]> = [
   ["stripe-live", "sk_live_abcdefghijklmnopqrstuvwx", true],
   ["mongodb-url", "mongodb+srv://user:secret@cluster0.xyz.mongodb.net/", true],
   ["npm-token", "npm_1234567890123456789012345678901234", true],
+  // review round: uppercase env keywords, supabase/jdbc/pat formats, cloudflare FP, critical formats
+  ["datadog-key", "DATADOG_API_KEY=1234567890abcdef1234567890abcdef12", true],
+  ["datadog-key", "trace id 1234567890abcdef1234567890abcdef12 không có ngữ cảnh datadog", false],
+  ["cloudflare-key", "CLOUDFLARE_API_TOKEN=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN", true],
+  ["cloudflare-key", "xem blog.cloudflare.com/how-to-explain-zero-trust-to-your-cto-and-board-members giùm", false],
+  ["supabase-key", "sb_secret_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMN", true],
+  ["jdbc-password", "jdbc:postgresql://db.host/prod?user=postgres&password=s3cr3tpw", true],
+  ["github-pat", "github_pat_11ABCDEFG0abcdefghijklmnopqrstuvwxyzABCDEFGH", true],
+  ["aws-access-key", "session key ASIAIOSFODNN7EXAMPLE", true],
+  ["bitbucket-client-secret", "ATabcdefghijklmnopqrstuvwxyz0123456", true],
+  ["openai-api-key", "sk-or-v1-abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", false],
+  ["deepseek-key", "sk-abcdefabcdefabcdefabcdefabcdef12", true],
+  // sentry: public key là 32 hex chuẩn (fixture gốc 34 hex — sửa fixture theo format thật)
+  ["sentry-dsn", "https://1234567890abcdef1234567890abcdef@o12345.ingest.sentry.io/4567890", true],
+  // google refresh token thật sau 1// thường ~100 ký tự (fixture gốc 53 — kéo dài tới 63)
+  ["google-oauth", "1//0abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", true],
+  ["azure-storage", "AccountKey=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/abcdefghijklmnopqr==", true],
+  ["telegram-bot", "110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw", true],
+  ["discord-bot", "MTE1NjY5ODY4NTU0Njk4NjYw.GaXyZz.abcdefghijklmnopqrstuvwxyzabcdefghij", true],
 ];
 
 describe("builtInRules", () => {

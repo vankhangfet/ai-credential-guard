@@ -1,7 +1,7 @@
 import type { Rule } from "../../types";
 
 export const aiRules: Rule[] = [
-  { id: "openai-api-key", severity: "block", description: "OpenAI API key", pattern: "\\bsk-(?!ant-|admin)[A-Za-z0-9_-]{20,}\\b" },
+  { id: "openai-api-key", severity: "block", description: "OpenAI API key", pattern: "\\bsk-(?!ant-|admin|or-v1-)(?![a-f0-9]{32}\\b)[A-Za-z0-9_-]{20,}\\b" },
   { id: "anthropic-key", severity: "block", description: "Anthropic API key", pattern: "\\bsk-ant-[A-Za-z0-9-]{16,}\\b" },
   { id: "openrouter-key", severity: "block", description: "OpenRouter API key", pattern: "\\bsk-or-v1-[a-f0-9]{48,64}\\b" },
   { id: "hf-token", severity: "block", description: "HuggingFace token", pattern: "\\bhf_[A-Za-z0-9]{34}\\b" },

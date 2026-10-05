@@ -1,7 +1,7 @@
 import type { Rule } from "../../types";
 
 export const cloudRules: Rule[] = [
-  { id: "aws-access-key", severity: "block", description: "AWS Access Key ID", pattern: "\\bAKIA[0-9A-Z]{16}\\b" },
+  { id: "aws-access-key", severity: "block", description: "AWS Access Key ID", pattern: "\\b(?:AKIA|ASIA)[0-9A-Z]{16}\\b" },
   { id: "google-api-key", severity: "block", description: "Google API key", pattern: "\\bAIza[0-9A-Za-z_-]{35}\\b" },
   { id: "google-oauth", severity: "block", description: "Google OAuth refresh token", pattern: "\\b1//[0-9A-Za-z_-]{60,}\\b" },
   { id: "azure-storage", severity: "block", description: "Azure storage connection string", pattern: "AccountKey=[A-Za-z0-9+/=]{50,}" },
