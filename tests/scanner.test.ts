@@ -2,7 +2,6 @@ import { describe, it, expect } from "vitest";
 import { scanText } from "../src/engine/scanner";
 import { compileRules } from "../src/engine/rules";
 import { builtInRules } from "../src/engine/rules";
-import type { Finding } from "../src/types";
 
 const rules = compileRules(builtInRules);
 
@@ -47,5 +46,30 @@ describe("scanText high-entropy detector", () => {
   it("câu tiếng Anh thường -> không finding", () => {
     const f = scanText("this configuration uses standard parameters", rules, { genericSecret: false, highEntropy: true, sensitivePaths: [] });
     expect(f.some((x) => x.ruleId === "high-entropy")).toBe(false);
+  });
+});
+
+describe("scanText các bổ sung review", () => {
+  it("MAX_FINDINGS cap 20 được ép buộc", () => {
+    const many = Array.from({ length: 30 }, (_, i) => `password=realvalue${String(i).padStart(3, "0")}x!`).join("\n");
+    const f = scanText(many, rules, { genericSecret: true, highEntropy: false, sensitivePaths: [] });
+    expect(f.length).toBe(20);
+  });
+  it("keyword nhúng chữ (lookbehind chặn): MAXPASSWORD= không match", () => {
+    const f = scanText("MAXPASSWORD=realvalue123", rules, { genericSecret: true, highEntropy: false, sensitivePaths: [] });
+    expect(f.some((x) => x.ruleId === "generic-secret")).toBe(false);
+  });
+  it('JSON "password": "value" -> phát hiện', () => {
+    const f = scanText('{"password": "s3cr3tV4lue!42"}', rules, { genericSecret: true, highEntropy: false, sensitivePaths: [] });
+    expect(f.some((x) => x.ruleId === "generic-secret")).toBe(true);
+  });
+  it("SECRET_KEY django -> phát hiện", () => {
+    const f = scanText("SECRET_KEY=django-insecure-v8fd#kq2!", rules, { genericSecret: true, highEntropy: false, sensitivePaths: [] });
+    expect(f.some((x) => x.ruleId === "generic-secret")).toBe(true);
+  });
+  it("cùng giá trị lặp lại -> dedup 1 finding", () => {
+    const f = scanText("a=s3cr3tX1&password=samevalue9 repeated password=samevalue9 again password=samevalue9", rules, { genericSecret: true, highEntropy: false, sensitivePaths: [] });
+    const gs = f.filter((x) => x.ruleId === "generic-secret");
+    expect(gs.length).toBe(1);
   });
 });
