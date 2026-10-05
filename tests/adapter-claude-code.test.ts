@@ -57,4 +57,28 @@ describe("claude-code adapter", () => {
     claudeCodeAdapter.install(root, { instructions: false });
     expect(claudeCodeAdapter.doctor(root).ok).toBe(true);
   });
+  it("user hook của họ sống sót qua install + uninstall", () => {
+    const root = mkproject({ claudeCode: true });
+    const fs = require("node:fs");
+    fs.mkdirSync(join(root, ".claude"), { recursive: true });
+    fs.writeFileSync(join(root, ".claude", "settings.json"), JSON.stringify({ hooks: { UserPromptSubmit: [{ hooks: [{ type: "command", command: "node mine.js" }] }] } }));
+    claudeCodeAdapter.install(root, { instructions: false });
+    claudeCodeAdapter.uninstall(root);
+    const settings = JSON.parse(fs.readFileSync(join(root, ".claude", "settings.json"), "utf8"));
+    expect(JSON.stringify(settings.hooks.UserPromptSubmit)).toContain("node mine.js");
+    expect(JSON.stringify(settings)).not.toContain("ai-guard");
+  });
+  it("entry malform (thiếu hooks array) không làm doctor throw", () => {
+    const root = mkproject({ claudeCode: true });
+    const fs = require("node:fs");
+    fs.mkdirSync(join(root, ".claude"), { recursive: true });
+    fs.writeFileSync(join(root, ".claude", "settings.json"), JSON.stringify({ hooks: { UserPromptSubmit: [{ matcher: "x" }] } }));
+    expect(() => claudeCodeAdapter.doctor(root)).not.toThrow();
+    expect(claudeCodeAdapter.doctor(root).ok).toBe(false);
+  });
+  it("uninstall khi không có settings.json -> không tạo file", () => {
+    const root = mkproject({ claudeCode: true });
+    claudeCodeAdapter.uninstall(root);
+    expect(existsSync(join(root, ".claude", "settings.json"))).toBe(false);
+  });
 });
