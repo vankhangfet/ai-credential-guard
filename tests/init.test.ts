@@ -20,7 +20,8 @@ describe("init", () => {
     const root = mkproject({});
     mkdirSync(join(root, ".ai-guard"), { recursive: true });
     writeFileSync(join(root, ".ai-guard", "rules.json"), '{"add":[{"id":"x","severity":"block","pattern":"X-[0-9]{4}","description":"x"}]}');
-    await init(["--root", root, "--tools", "claude-code"], "");
+    const res = await init(["--root", root, "--tools", "claude-code"], "");
+    expect(res).toBe(0);
     const rules = JSON.parse(readFileSync(join(root, ".ai-guard", "rules.json"), "utf8"));
     expect(rules.add[0].id).toBe("x");
   });
@@ -33,7 +34,8 @@ describe("init", () => {
   });
   it("--no-instructions: không tạo CLAUDE.md", async () => {
     const root = mkproject({ claudeCode: true });
-    await init(["--root", root, "--tools", "claude-code", "--no-instructions"], "");
+    const res = await init(["--root", root, "--tools", "claude-code", "--no-instructions"], "");
+    expect(res).toBe(0);
     expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
   });
   it("không phát hiện tool nào -> exit 1 + hướng dẫn", async () => {

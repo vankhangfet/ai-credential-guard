@@ -2,6 +2,7 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } fr
 import { join } from "node:path";
 import { allAdapters } from "../adapters";
 import type { InstallResult } from "../adapters/types";
+import { flagValue } from "../util/argv";
 
 const DEFAULT_RULES = {
   add: [{ id: "example-internal", severity: "block", pattern: "CORP-[A-Z0-9]{8,}", description: "Ví dụ: đổi thành format token nội bộ của bạn" }],
@@ -11,14 +12,16 @@ const DEFAULT_RULES = {
 const DEFAULT_CONFIG = { sensitivePaths: null, genericSecret: true, highEntropy: true };
 
 export async function init(argv: string[], _input: string): Promise<number> {
-  const rootIdx = argv.indexOf("--root");
-  const root = rootIdx >= 0 && argv[rootIdx + 1] !== undefined ? argv[rootIdx + 1] : process.cwd();
+  const root = flagValue(argv, "--root") ?? process.cwd();
   const noInstructions = argv.includes("--no-instructions");
-  const toolsIdx = argv.indexOf("--tools");
-  const wanted = toolsIdx >= 0 && argv[toolsIdx + 1] !== undefined ? argv[toolsIdx + 1].split(",") : null;
+  const wanted = flagValue(argv, "--tools")?.split(",").map((s) => s.trim()).filter(Boolean) ?? null;
 
   const adapters = allAdapters();
   const detected = adapters.filter((a) => (wanted ? wanted.includes(a.id) : a.detect(root)));
+  const unknown = wanted ? wanted.filter((w) => !adapters.some((a) => a.id === w)) : [];
+  if (unknown.length) {
+    process.stderr.write(`ai-guard: --tools chứa id không hỗ trợ: ${unknown.join(", ")} (hỗ trợ: ${adapters.map((a) => a.id).join(", ")})\n`);
+  }
   if (!detected.length) {
     process.stderr.write([
       "ai-guard: không phát hiện AI tool nào trong dự án.",
@@ -52,6 +55,7 @@ export async function init(argv: string[], _input: string): Promise<number> {
   console.log("ai-guard: đã khởi tạo.");
   for (const r of results) console.log(`  ${r.ok ? "✓" : "✗"} ${r.adapter}: ${r.detail}`);
   console.log("  Cấu hình rule: .ai-guard/rules.json — audit log: .ai-guard/logs/");
+  console.log("  Lưu ý: rules.json có rule demo 'example-internal' (CORP-*) đang bật — sửa/xoá theo nhu cầu.");
   console.log("  Kiểm tra: npx ai-guard doctor");
   console.log("  Lưu ý: thêm ai-guard vào devDependencies (npm i -D ai-guard) để hook chạy mà không cần mạng.");
   return results.some((r) => !r.ok) ? 1 : 0;
