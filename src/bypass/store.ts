@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 interface BypassFlag {
@@ -12,9 +12,14 @@ interface BypassFlag {
 
 const bypassDir = (root: string) => join(root, ".ai-guard", ".bypass");
 
+// path phải là repo-relative đã chuẩn hóa (backslash→/, lowercase); caller (check-file) trách nhiệm relativize trước khi gọi
+function pathHash(path: string): string {
+  return createHash("sha1").update(path.replace(/\\/g, "/").toLowerCase()).digest("hex").slice(0, 12);
+}
+
+// path phải là repo-relative đã chuẩn hóa (backslash→/, lowercase); caller (check-file) trách nhiệm relativize trước khi gọi
 function flagName(scope: string, path?: string): string {
-  const h = path ? createHash("sha1").update(path.replace(/\\/g, "/").toLowerCase()).digest("hex").slice(0, 12) : "all";
-  return `${scope}-${h}.json`;
+  return `${scope}-${path ? pathHash(path) : "all"}.json`;
 }
 
 export function grantBypass(root: string, scope: "prompt" | "file", path: string | undefined, minutes: number): { duration_min: number } {
@@ -23,12 +28,15 @@ export function grantBypass(root: string, scope: "prompt" | "file", path: string
   const now = Date.now();
   const flag: BypassFlag = {
     scope,
-    pathHash: path ? flagName(scope, path).split("-")[1] : undefined,
+    pathHash: path ? pathHash(path) : undefined,
     grantedAt: new Date(now).toISOString(),
     expiresAt: now + minutes * 60_000,
     duration_min: minutes,
   };
-  writeFileSync(join(dir, flagName(scope, path)), JSON.stringify(flag));
+  const target = join(dir, flagName(scope, path));
+  const tmp = target + ".tmp-" + Date.now();
+  writeFileSync(tmp, JSON.stringify(flag));
+  renameSync(tmp, target);
   return { duration_min: minutes };
 }
 
@@ -41,8 +49,8 @@ export function hasValidBypass(root: string, scope: "prompt" | "file", path?: st
       if (!f.endsWith(".json")) continue;
       try {
         const flag = JSON.parse(readFileSync(join(dir, f), "utf8")) as BypassFlag;
-        if (flag.expiresAt <= Date.now()) rmSync(join(dir, f));
-      } catch { rmSync(join(dir, f)); }
+        if (flag.expiresAt <= Date.now()) rmSync(join(dir, f), { force: true });
+      } catch { rmSync(join(dir, f), { force: true }); }
     }
     const target = join(dir, flagName(scope, path));
     if (!existsSync(target)) return false;

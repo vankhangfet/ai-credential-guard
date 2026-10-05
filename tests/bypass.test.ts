@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { grantBypass, hasValidBypass } from "../src/bypass/store";
@@ -31,5 +31,16 @@ describe("bypass store", () => {
   it("prompt bypass KHÔNG mở file bypass", () => {
     grantBypass(root, "prompt", undefined, 5);
     expect(hasValidBypass(root, "file", ".env")).toBe(false);
+  });
+  it("file flag KHÔNG mở prompt bypass", () => {
+    grantBypass(root, "file", ".env", 5);
+    expect(hasValidBypass(root, "prompt")).toBe(false);
+  });
+  it("flag hết hạn bị XÓA khỏi đĩa", () => {
+    grantBypass(root, "prompt", undefined, 0);
+    hasValidBypass(root, "prompt");
+    const dir = join(root, ".ai-guard", ".bypass");
+    const remaining = readdirSync(dir).filter((f) => f.endsWith(".json"));
+    expect(remaining.length).toBe(0);
   });
 });
