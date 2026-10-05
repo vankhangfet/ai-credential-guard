@@ -18,6 +18,6 @@ export function logInternalError(projectRoot: string, err: unknown): void {
   try {
     const dir = join(projectRoot, ".ai-guard", "logs");
     mkdirSync(dir, { recursive: true });
-    appendFileSync(join(dir, "error.log"), `[${new Date().toISOString()}] ${String(err)}\n`);
+    appendFileSync(join(dir, "error.log"), `[${new Date().toISOString()}] ${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
   } catch { /* ignore */ }
 }

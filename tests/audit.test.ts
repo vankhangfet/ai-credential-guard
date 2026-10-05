@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { findProjectRoot } from "../src/root";
@@ -47,7 +47,10 @@ describe("appendAuditEvent", () => {
     const lines = readFileSync(join(root, ".ai-guard", "logs", files[0]), "utf8").trim().split("\n");
     expect(lines.length).toBe(2);
   });
-  it("không throw khi root không tồn tại", () => {
-    expect(() => appendAuditEvent(join(tmpdir(), "no-such-aig-" + Date.now()), { ts: "", tool: "x", event: "prompt", action: "blocked" })).not.toThrow();
+  it("không throw khi ghi log thất bại (root là file)", () => {
+    const fileAsRoot = join(tmpdir(), "aig-file-root-" + Date.now());
+    writeFileSync(fileAsRoot, "x");
+    expect(() => appendAuditEvent(fileAsRoot, { ts: "", tool: "x", event: "prompt", action: "blocked" })).not.toThrow();
+    expect(() => appendAuditEvent(fileAsRoot + "/nope", { ts: "", tool: "x", event: "prompt", action: "blocked" })).not.toThrow();
   });
 });
