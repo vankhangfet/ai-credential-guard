@@ -40,6 +40,41 @@ describe("loadRules", () => {
     expect(() => loadRules(root)).not.toThrow();
     expect(loadRules(root).length).toBeGreaterThan(0);
   });
+  it("add trùng id built-in -> THAY THẾ (không nhân đôi)", () => {
+    const rules = loadRules(mkProject({ add: [{ id: "jwt", severity: "block", pattern: "REPLACED-[A-Z]+", description: "replaced" }] }));
+    const jwt = rules.filter((r) => r.id === "jwt");
+    expect(jwt.length).toBe(1);
+    expect(jwt[0].severity).toBe("block");
+  });
+  it("remove + add cùng id -> rule mới giữ lại (replace được pattern built-in)", () => {
+    const rules = loadRules(mkProject({ remove: ["jwt"], add: [{ id: "jwt", severity: "warn", pattern: "NEWJWT-[0-9]+", description: "new" }] }));
+    const jwt = rules.filter((r) => r.id === "jwt");
+    expect(jwt.length).toBe(1);
+    expect(jwt[0].re!.test("NEWJWT-123")).toBe(true);
+  });
+  it("add severity sai -> bị bỏ qua, built-in nguyên vẹn", () => {
+    const rules = loadRules(mkProject({ add: [{ id: "bad", severity: "blok", pattern: "X", description: "x" }] }));
+    expect(rules.some((r) => r.id === "bad")).toBe(false);
+  });
+  it("override severity sai -> bỏ qua, giữ severity gốc", () => {
+    const rules = loadRules(mkProject({ override: { jwt: { severity: "blok" } } }));
+    expect(rules.find((r) => r.id === "jwt")!.severity).toBe("warn");
+  });
+  it("override id không tồn tại -> vô hiệu vô hại", () => {
+    expect(() => loadRules(mkProject({ override: { nope: { severity: "block" } } }))).not.toThrow();
+  });
+  it("rules.json rỗng {} -> built-in nguyên vẹn", () => {
+    const rules = loadRules(mkProject({}));
+    expect(rules.some((r) => r.id === "aws-access-key")).toBe(true);
+  });
+  it("config.json hỏng -> default config, không throw", () => {
+    const root = mkdtempSync(join(tmpdir(), "aig-"));
+    mkdirSync(join(root, ".ai-guard"), { recursive: true });
+    writeFileSync(join(root, ".ai-guard", "config.json"), "{bad");
+    const cfg = loadConfig(root);
+    expect(cfg.genericSecret).toBe(true);
+    expect(Array.isArray(cfg.sensitivePaths)).toBe(true);
+  });
 });
 
 describe("loadConfig", () => {
