@@ -21,6 +21,10 @@ export async function allow(argv: string[]): Promise<number> {
     return 1;
   }
   const minutes = parseInt(minutesFlag.slice(2), 10);
+  if (!(minutes >= 1 && minutes <= 1440)) {
+    process.stderr.write("ai-guard: thời gian cho phép phải từ 1 đến 1440 phút (24h)\n");
+    return 1;
+  }
   const path = scope === "file"
     ? argv.find((a, i) => i > 0 && !a.startsWith("--") && a !== minutesFlag && a !== flagValue(argv, "--root"))
     : undefined;

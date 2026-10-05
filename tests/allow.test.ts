@@ -27,4 +27,8 @@ describe("allow", () => {
   it("thiếu --Nm -> exit 1", async () => {
     expect(await runCli(["allow", "prompt", "--root", root], "")).toBe(1);
   });
+  it("--0m và --2000m bị từ chối", async () => {
+    expect(await runCli(["allow", "prompt", "--0m", "--root", root], "")).toBe(1);
+    expect(await runCli(["allow", "prompt", "--2000m", "--root", root], "")).toBe(1);
+  });
 });

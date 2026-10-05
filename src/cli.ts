@@ -18,10 +18,20 @@ export async function runCli(argv: string[], input: string): Promise<number> {
   }
 }
 
+// chỉ các lệnh này đọc stdin; các lệnh khác (allow, version, ...) phải dispatch ngay
+// nếu không sẽ treo ở TTY chờ EOF
+export const STDIN_COMMANDS = new Set(["check-prompt", "check-file"]);
+
 if (require.main === module) {
-  const chunks: Buffer[] = [];
-  process.stdin.on("data", (c) => chunks.push(c));
-  process.stdin.on("end", async () => {
-    process.exitCode = await runCli(process.argv.slice(2), Buffer.concat(chunks).toString("utf8"));
-  });
+  const command = process.argv[2];
+  const dispatch = (input: string) => {
+    runCli(process.argv.slice(2), input).then((code) => { process.exitCode = code; });
+  };
+  if (!STDIN_COMMANDS.has(command)) {
+    dispatch("");
+  } else {
+    const chunks: Buffer[] = [];
+    process.stdin.on("data", (c) => chunks.push(c));
+    process.stdin.on("end", () => dispatch(Buffer.concat(chunks).toString("utf8")));
+  }
 }
