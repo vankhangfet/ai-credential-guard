@@ -2,6 +2,7 @@ import { loadRules, loadConfig } from "../engine/loader";
 import { scanText } from "../engine/scanner";
 import { appendAuditEvent } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
+import { findProjectRoot } from "../root";
 
 export function extractPrompt(input: string): string | null {
   const s = input.trim();
@@ -9,7 +10,7 @@ export function extractPrompt(input: string): string | null {
   if (s.startsWith("{")) {
     try {
       const j = JSON.parse(s);
-      const p = j?.prompt ?? j?.input ?? j?.message ?? j?.text;
+      const p = [j?.prompt, j?.input, j?.message, j?.text].find((v) => typeof v === "string");
       return typeof p === "string" ? p : null;
     } catch { /* fallthrough */ }
   }
@@ -18,12 +19,11 @@ export function extractPrompt(input: string): string | null {
 
 export async function checkPrompt(argv: string[], input: string): Promise<number> {
   const rootIdx = argv.indexOf("--root");
-  const root = rootIdx >= 0 ? argv[rootIdx + 1] : process.cwd();
+  const root = rootIdx >= 0 && argv[rootIdx + 1] !== undefined ? argv[rootIdx + 1] : process.cwd();
   const toolIdx = argv.indexOf("--tool");
-  const tool = toolIdx >= 0 ? argv[toolIdx + 1] : "unknown";
+  const tool = toolIdx >= 0 && argv[toolIdx + 1] !== undefined ? argv[toolIdx + 1] : "unknown";
   const prompt = extractPrompt(input);
   if (!prompt) return 0;
-  const { findProjectRoot } = await import("../root");
   const projectRoot = findProjectRoot(root);
   if (!projectRoot) return 0; // chưa init -> fail-open
   const cfg = loadConfig(projectRoot);

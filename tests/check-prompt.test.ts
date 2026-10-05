@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { mkdtempSync, mkdirSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCli } from "../src/cli";
@@ -24,6 +24,7 @@ function lastEvent(): any {
 describe("check-prompt", () => {
   it("prompt sạch -> exit 0, không log", async () => {
     expect(await runCli(["check-prompt", "--root", root], stdinOf(root, "giúp tôi viết hàm sort"))).toBe(0);
+    expect(existsSync(join(root, ".ai-guard", "logs"))).toBe(false);
   });
   it("prompt chứa AWS key -> exit 2, stderr có hướng dẫn bypass, log blocked", async () => {
     const code = await runCli(["check-prompt", "--root", root], stdinOf(root, "dùng key AKIAIOSFODNN7EXAMPLE giúp tôi"));
@@ -49,5 +50,25 @@ describe("check-prompt", () => {
   });
   it("stdin không phải JSON -> coi toàn bộ là prompt (shim dùng)", async () => {
     expect(await runCli(["check-prompt", "--root", root], " plaintext AKIAIOSFODNN7EXAMPLE ")).toBe(2);
+  });
+  it("warn + block -> 2 events đúng thứ tự (warned rồi blocked)", async () => {
+    const code = await runCli(["check-prompt", "--root", root], stdinOf(root, "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U và AKIAIOSFODNN7EXAMPLE"));
+    expect(code).toBe(2);
+    const dir = join(root, ".ai-guard", "logs");
+    const files = readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
+    const lines = readFileSync(join(dir, files[0]), "utf8").trim().split("\n");
+    expect(lines.length).toBe(2);
+    expect(JSON.parse(lines[0]).action).toBe("warned");
+    expect(JSON.parse(lines[1]).action).toBe("blocked");
+  });
+  it("dangling --root không crash, fail-open exit 0/2 hợp lệ", async () => {
+    // fallback là process.cwd(); chdir vào tmp root (có .ai-guard) để pin deterministically exit 2
+    const cwd = process.cwd();
+    process.chdir(root);
+    try {
+      expect(await runCli(["check-prompt", "--root"], stdinOf(root, "AKIAIOSFODNN7EXAMPLE"))).toBe(2);
+    } finally {
+      process.chdir(cwd);
+    }
   });
 });
