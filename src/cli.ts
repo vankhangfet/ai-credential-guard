@@ -10,6 +10,8 @@ export async function runCli(argv: string[], input: string): Promise<number> {
       return (await import("./commands/check-file")).checkFile(argv.slice(1), input);
     case "allow":
       return (await import("./commands/allow")).allow(argv.slice(1));
+    case "init":
+      return (await import("./commands/init")).init(argv.slice(1), input);
     default:
       console.error(
         "ai-guard: unknown or missing command. usage: ai-guard <init|check-prompt|check-file|allow|doctor|self-test|uninstall|version>"
