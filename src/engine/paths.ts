@@ -9,7 +9,13 @@ export const DEFAULT_SENSITIVE_PATHS: string[] = [
 ];
 
 export function normalizePath(p: string): string {
-  return p.replace(/\\/g, "/").replace(/^\.\//, "").replace(/^\/+/, "").toLowerCase();
+  return p
+    .replace(/\\/g, "/")
+    .replace(/^[a-z]:/i, "")
+    .replace(/^(\.\.\/)+/, "")
+    .replace(/^\.\//, "")
+    .replace(/^\/+/, "")
+    .toLowerCase();
 }
 
 export function globToRegex(glob: string): RegExp {

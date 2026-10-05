@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isSensitivePath, globToRegex } from "../src/engine/paths";
+import { isSensitivePath, globToRegex, normalizePath } from "../src/engine/paths";
 import { DEFAULT_SENSITIVE_PATHS } from "../src/engine/paths";
 
 describe("isSensitivePath", () => {
@@ -25,5 +25,12 @@ describe("isSensitivePath", () => {
   }
   it("chuẩn hóa \\ -> / trên Windows", () => {
     expect(isSensitivePath("certs\\prod.pem", DEFAULT_SENSITIVE_PATHS)).toBe(true);
+  });
+  it("id_rsa.txt.readme là sensitive (prefix id_rsa)", () => {
+    expect(isSensitivePath("id_rsa.txt.readme", DEFAULT_SENSITIVE_PATHS)).toBe(true);
+  });
+  it("drive letter và ../ bị strip trong normalizePath", () => {
+    expect(normalizePath("C:\\proj\\secrets\\x.key")).toBe("proj/secrets/x.key");
+    expect(normalizePath("../../outside/.env")).toBe("outside/.env");
   });
 });
