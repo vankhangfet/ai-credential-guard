@@ -41,4 +41,13 @@ describe("isPlaceholder", () => {
       expect(isPlaceholder(s), s).toBe(true);
     }
   });
+  it("không ReDoS với input dài (guard 200 ký tự)", () => {
+    const start = Date.now();
+    expect(isPlaceholder("your-key" + "a".repeat(100_000) + "!")).toBe(false);
+    expect(isPlaceholder("xxxxxxxx" + "x".repeat(100_000) + "!")).toBe(false);
+    expect(Date.now() - start).toBeLessThan(500);
+  });
+  it("giá trị dài hơn 200 ký tự không bao giờ là placeholder", () => {
+    expect(isPlaceholder("test_" + "a".repeat(300))).toBe(false);
+  });
 });
