@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 
 export const MARKER = "ai-guard";
 
@@ -19,5 +19,7 @@ export function backupOnce(path: string): void {
 
 export function writeJson(path: string, data: unknown): void {
   backupOnce(path);
-  writeFileSync(path, JSON.stringify(data, null, 2) + "\n");
+  const tmp = path + ".aiguard.tmp";
+  writeFileSync(tmp, JSON.stringify(data, null, 2) + "\n");
+  renameSync(tmp, path);
 }
