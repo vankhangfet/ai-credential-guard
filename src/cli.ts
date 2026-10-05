@@ -12,6 +12,15 @@ export async function runCli(argv: string[], input: string): Promise<number> {
       return (await import("./commands/allow")).allow(argv.slice(1));
     case "init":
       return (await import("./commands/init")).init(argv.slice(1), input);
+    case "doctor":
+      return (await import("./commands/doctor")).doctor(argv.slice(1));
+    case "self-test": {
+      const { selfTest } = await import("./commands/self-test");
+      const r = selfTest();
+      r.failures.forEach((f) => console.log("✗ " + f));
+      console.log(`self-test: ${r.total - r.failures.length}/${r.total} pass`);
+      return r.failures.length ? 1 : 0;
+    }
     default:
       console.error(
         "ai-guard: unknown or missing command. usage: ai-guard <init|check-prompt|check-file|allow|doctor|self-test|uninstall|version>"
