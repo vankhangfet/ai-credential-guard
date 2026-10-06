@@ -39,7 +39,9 @@ RULES_ARTIFACT = [
      "pattern": r"\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{22,}\b",
      "description": "GitHub personal access token"},
     {"id": "db-url", "severity": "block",
-     "pattern": r"\b(?:mysql|postgres|postgresql|mongodb(?:\+srv)?|redis|rediss|mssql|amqps?|ibmdb)://[^\s:@/\"']+:[^\s:@/\"']+@",
+     # non-raw string: raw-string r"...\"..." sẽ giữ backslash trong class, lệch
+     # verbatim so với src — username class [^\s:@/"'], password class [^\s@/"']
+     "pattern": "\\b(?:mysql|postgres|postgresql|mongodb(?:\\+srv)?|redis|rediss|mssql|amqps?|ibmdb)://[^\\s:@/\"']+:[^\\s@/\"']+@",
      "description": "DB connection string có password"},
     {"id": "slack-token", "severity": "block",
      "pattern": r"\bxox[bapr]-[A-Za-z0-9-]{10,}\b",
@@ -304,6 +306,17 @@ class EngineUnitTests(unittest.TestCase):
              "description": "AWS Access Key ID"},
         ])
         self.assertIsNotNone(rules[0]["re"].search("đAKIAIOSFODNN7EXAMPLE"))
+
+    def test_db_url_pattern_verbatim_from_dist(self):
+        # lock verbatim-ness: pattern trong test artifact phải GIỐNG HỆT chuỗi
+        # (không phải chỉ regex-tương đương) đọc từ dist/rules.json
+        dist_rules = Path(__file__).resolve().parents[2] / "dist" / "rules.json"
+        if not dist_rules.exists():
+            self.skipTest("dist/rules.json chưa build")
+        dist_pattern = [r["pattern"] for r in json.loads(dist_rules.read_text(encoding="utf-8"))
+                        if r["id"] == "db-url"][0]
+        artifact_pattern = [r["pattern"] for r in RULES_ARTIFACT if r["id"] == "db-url"][0]
+        self.assertEqual(artifact_pattern, dist_pattern)
 
 
 class LoadRulesUnitTests(unittest.TestCase):
