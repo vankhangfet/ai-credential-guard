@@ -10,19 +10,24 @@ const { spawnSync } = require("node:child_process");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-// Fast-path: cài local qua `npm i -D ai-guard` — chạy node trực tiếp (nhanh hơn npx ~20x;
-// npx --no-install ai-guard chỉ là fallback khi project chưa có local install).
-// Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ __dirname/../.. (cwd-independent) + cwd.
+// Fast-path: cài local qua `npm i -D ai-guard` — chạy process.execPath (binary node đang chạy
+// hook) với resolved cli.js: nhanh hơn npx ~20x và hoạt động trên MỌI platform (kể cả win32 —
+// không cần .cmd, không cần shell). Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ
+// __dirname/../.. (cwd-independent) + cwd. Fallback npx chỉ khi chưa có local install: win32
+// spawn không tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true;
+// posix giữ bare npx như cũ.
 function resolveCmd() {
   for (const base of [join(__dirname, "..", ".."), process.cwd()]) {
     for (const p of [
       join(base, "node_modules", "ai-guard", "dist", "cli.js"),
       join(base, "..", "node_modules", "ai-guard", "dist", "cli.js"),
     ]) {
-      if (existsSync(p)) return { cmd: "node", prefix: [p] };
+      if (existsSync(p)) return { cmd: process.execPath, prefix: [p], shell: false };
     }
   }
-  return { cmd: process.platform === "win32" ? "npx.cmd" : "npx", prefix: ["--no-install", "ai-guard"] };
+  return process.platform === "win32"
+    ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"], shell: true }
+    : { cmd: "npx", prefix: ["--no-install", "ai-guard"], shell: false };
 }
 
 // Cline blocking contract (blog v3.36): stdout JSON với cancel=true chặn tool call.
@@ -30,15 +35,16 @@ function block(message) {
   process.stdout.write(JSON.stringify({ cancel: true, errorMessage: message }) + "\n");
 }
 
-// Spawns the shared CLI (qua fast-path node hoặc fallback npx):
+// Spawns the shared CLI (qua fast-path execPath hoặc fallback npx):
 //   ai-guard check-file --tool cline <path>   (stdin: original Cline PreToolUse payload)
 // Exit code 2 = blocked -> in ra {"cancel":true,...} theo contract chặn của Cline.
 function guard(args, input) {
-  const { cmd, prefix } = resolveCmd();
+  const { cmd, prefix, shell } = resolveCmd();
   const r = spawnSync(cmd, [...prefix, ...args], {
     input: input ?? "",
     encoding: "utf8",
     timeout: 10_000,
+    shell,
   });
   if (r.error) {
     // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được

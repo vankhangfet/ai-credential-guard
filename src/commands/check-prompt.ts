@@ -12,10 +12,13 @@ export function extractPrompt(input: string): string | null {
     try {
       const j = JSON.parse(s);
       const p = [j?.prompt, j?.input, j?.message, j?.text].find((v) => typeof v === "string");
-      return typeof p === "string" ? p : null;
+      // JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng field name lạ) ->
+      // fall-through quét RAW: prompt/secret vẫn nằm nguyên văn trong JSON text (fallback
+      // alias-miss của cline UserPromptSubmit shim truyền nguyên raw stdin).
+      if (typeof p === "string") return p;
     } catch { /* fallthrough */ }
   }
-  return s; // raw text
+  return s; // raw text (hoặc raw JSON không có alias field nào)
 }
 
 export async function checkPrompt(argv: string[], input: string): Promise<number> {

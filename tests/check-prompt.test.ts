@@ -51,6 +51,11 @@ describe("check-prompt", () => {
   it("stdin không phải JSON -> coi toàn bộ là prompt (shim dùng)", async () => {
     expect(await runCli(["check-prompt", "--root", root], " plaintext AKIAIOSFODNN7EXAMPLE ")).toBe(2);
   });
+  it("JSON hợp lệ nhưng không alias field nào -> quét raw (fallback alias-miss của shim)", async () => {
+    // cline UserPromptSubmit shim fallback: payload JSON field name lạ -> truyền nguyên raw stdin
+    const payload = JSON.stringify({ clineVersion: "3.36", question: "dùng key AKIAIOSFODNN7EXAMPLE giúp tôi" });
+    expect(await runCli(["check-prompt", "--root", root], payload)).toBe(2);
+  });
   it("warn + block -> 2 events đúng thứ tự (warned rồi blocked)", async () => {
     const code = await runCli(["check-prompt", "--root", root], stdinOf(root, "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U và AKIAIOSFODNN7EXAMPLE"));
     expect(code).toBe(2);

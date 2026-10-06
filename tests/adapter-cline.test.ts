@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkproject } from "./util/mkproject";
 import { clineAdapter } from "../src/adapters/cline";
@@ -58,5 +59,57 @@ describe("cline adapter", () => {
     expect(clineAdapter.doctor(root).ok).toBe(false);
     clineAdapter.install(root, { instructions: false });
     expect(clineAdapter.doctor(root).ok).toBe(true);
+  });
+});
+
+// Fix C (ride-along từ review Task 21): vitest THỰC THI template qua node thật để lock cancel
+// contract giữa template và engine. Template fast-path spawn `node_modules/ai-guard/dist/cli.js`
+// nên test copy dist ĐÃ BUILD của repo vào tmp project — CẦN `npm run build` trước; dist thiếu
+// (CI chưa build) -> skip toàn bộ (it.skipIf).
+const DIST_CLI = join(__dirname, "..", "dist", "cli.js");
+const DIST_DIR = join(__dirname, "..", "dist");
+
+describe("cline templates (thực thi qua node — lock cancel contract)", () => {
+  function mkExecProject(): string {
+    const root = mkproject({ cline: true }); // .ai-guard sẵn -> engine chặn được
+    clineAdapter.install(root, { instructions: false });
+    cpSync(DIST_DIR, join(root, "node_modules", "ai-guard", "dist"), { recursive: true });
+    return root;
+  }
+  it.skipIf(!existsSync(DIST_CLI))("PreToolUse payload .env -> stdout {\"cancel\":true}", () => {
+    const root = mkExecProject();
+    const payload = JSON.stringify({
+      tool_name: "read_file",
+      tool_input: { path: join(root, ".env") },
+      workspaceRoots: [root],
+    });
+    const r = spawnSync(process.execPath, [join(root, PRE)], { input: payload, encoding: "utf8", timeout: 30_000 });
+    expect(r.status).toBe(0); // contract Cline: chặn qua stdout JSON, KHÔNG qua exit code
+    expect(r.stdout).toContain('"cancel":true');
+    expect(r.stdout).toContain("errorMessage");
+  });
+  it.skipIf(!existsSync(DIST_CLI))("PreToolUse payload sạch -> stdout rỗng, exit 0", () => {
+    const root = mkExecProject();
+    const payload = JSON.stringify({
+      tool_name: "read_file",
+      tool_input: { path: join(root, "src", "main.ts") },
+      workspaceRoots: [root],
+    });
+    const r = spawnSync(process.execPath, [join(root, PRE)], { input: payload, encoding: "utf8", timeout: 30_000 });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toBe("");
+  });
+  it.skipIf(!existsSync(DIST_CLI))("UserPromptSubmit alias-miss (Fix B): secret trong RAW JSON vẫn bị chặn", () => {
+    const root = mkExecProject();
+    // payload JSON hợp lệ nhưng KHÔNG alias field nào match (question) — secret nằm nguyên văn
+    // trong raw JSON -> template phải fallback quét raw thay vì bỏ qua.
+    const payload = JSON.stringify({
+      clineVersion: "3.36",
+      question: "dùng key AKIAIOSFODNN7EXAMPLE giúp tôi",
+      workspaceRoots: [root],
+    });
+    const r = spawnSync(process.execPath, [join(root, PROMPT)], { input: payload, encoding: "utf8", timeout: 30_000 });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('"cancel":true');
   });
 });

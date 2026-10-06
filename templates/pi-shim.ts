@@ -12,26 +12,32 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
-// Fast-path: cài local qua `npm i -D ai-guard` — chạy node trực tiếp (nhanh hơn npx ~20x;
-// verifier đo npx --no-install ~6s/call trên Windows, node dist/cli.js ~300ms).
-// npx --no-install ai-guard chỉ là fallback khi project chưa có local install.
-function resolveCmd(): { cmd: string; prefix: string[] } {
+// Fast-path: cài local qua `npm i -D ai-guard` — chạy process.execPath (binary node/bun đang
+// chạy shim) với resolved cli.js: nhanh hơn npx ~20x (verifier đo npx --no-install ~6s/call trên
+// Windows, node dist/cli.js ~300ms) và hoạt động trên MỌI platform (kể cả win32 — không cần
+// .cmd, không cần shell). Fallback npx chỉ khi project chưa có local install: win32 spawn không
+// tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true; posix giữ
+// bare npx như cũ.
+function resolveCmd(): { cmd: string; prefix: string[]; shell: boolean } {
   for (const p of ["node_modules/ai-guard/dist/cli.js", "../node_modules/ai-guard/dist/cli.js"]) {
-    if (existsSync(p)) return { cmd: "node", prefix: [p] };
+    if (existsSync(p)) return { cmd: process.execPath, prefix: [p], shell: false };
   }
-  return { cmd: "npx", prefix: ["--no-install", "ai-guard"] };
+  return process.platform === "win32"
+    ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"], shell: true }
+    : { cmd: "npx", prefix: ["--no-install", "ai-guard"], shell: false };
 }
 
-// Spawns the shared CLI (qua fast-path node hoặc fallback npx):
-//   ai-guard check-file --tool pi <path>   (from tool_call)
-//   ai-guard check-prompt --tool pi        (from before_agent_start)
-// Exit code 2 = blocked -> caller chặn theo cơ chế của từng event.
+// Spawns the shared CLI (qua fast-path execPath hoặc fallback npx):
+//   ai-guard check-file --tool <tool> <path>   (tool-side)
+//   ai-guard check-prompt --tool <tool>        (prompt-side)
+// Exit code 2 = blocked -> throw để caller chặn theo cơ chế của event tương ứng.
 function guard(args: string[], input?: string): void {
-  const { cmd, prefix } = resolveCmd();
+  const { cmd, prefix, shell } = resolveCmd();
   const r = spawnSync(cmd, [...prefix, ...args], {
     input: input ?? "",
     encoding: "utf8",
     timeout: 10_000,
+    shell,
   });
   if (r.error) {
     // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được
