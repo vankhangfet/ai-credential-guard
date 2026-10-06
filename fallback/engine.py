@@ -34,11 +34,12 @@ PLACEHOLDER_RE = re.compile(
 
 # (?<![a-z0-9]) thay cho \b đầu: cho phép tiền tố "_" trong DB_PASSWORD/MY_API_KEY;
 # ["']? sau \b: hỗ trợ dạng JSON "password": "value" (quote đứng trước dấu hai chấm)
+# re.ASCII: JS \b/\w là ASCII-based — "đAKIA..." phải match giống JS (parity)
 GENERIC_ASSIGN_RE = re.compile(
     r"(?<![a-z0-9])(passwo?rd|passwd|secret|secret[_-]?key|api[_-]?key|apikey|"
     r"auth[_-]?token|access[_-]?token|client[_-]?secret|admin[_-]?pass)\b"
     r"[\"']?\s*[:=]\s*[\"']?([^\s\"']{8,})[\"']?",
-    re.IGNORECASE,
+    re.IGNORECASE | re.ASCII,
 )
 
 # apply_patch (Codex): path nằm trong patch text — "*** Update File: <path>" ở header mỗi hunk.
@@ -121,14 +122,18 @@ def _read_json_safe(path: str):
 
 
 def compile_rules(rules: list) -> list:
-    """Compile pattern của từng rule; regex hỏng giữ nguyên (không có 're')."""
+    """Compile pattern của từng rule; regex hỏng giữ nguyên (không có 're').
+
+    re.ASCII: JS regex không có flag 'u' thì \\b/\\w/\\d là ASCII-based —
+    "đAKIA..." phải match như JS (unicode mode của python sẽ bỏ qua \b đó).
+    """
     out = []
     for r in rules:
         c = dict(r)
         pattern = r.get("pattern") or ""
         if pattern:
             try:
-                c["re"] = re.compile(pattern)
+                c["re"] = re.compile(pattern, re.ASCII)
             except re.error:
                 pass
         out.append(c)
@@ -504,7 +509,7 @@ def cmd_check_prompt(args: list, stdin_text: str) -> int:
     if len(blocks) > 5:
         lines.append("  • ... và {} findings khác".format(len(blocks) - 5))
     lines.append("Nếu bạn CỐ Ý muốn gửi nội dung này, chạy lệnh sau rồi gửi lại prompt:")
-    lines.append("  python engine.py allow prompt --5m")
+    lines.append("  python .ai-guard/bin/engine.py allow prompt --5m")
     lines.append("(Lần gửi kế tiếp trong thời gian cho phép sẽ được ghi vào audit log.)")
     sys.stderr.write("\n".join(lines) + "\n")
     return 2
@@ -589,7 +594,7 @@ def cmd_check_file(args: list, stdin_text: str) -> int:
             "ai-guard: ĐÃ CHẶN — file nhạy cảm (chưa cho AI đọc/ghi).",
             "  • Path: {}".format(rel),
             "Nếu bạn CỐ Ý muốn cho phép file này, chạy:",
-            "  python engine.py allow file {} --10m".format(rel),
+            "  python .ai-guard/bin/engine.py allow file {} --10m".format(rel),
         ]) + "\n")
         return 2
     return 0
@@ -640,9 +645,21 @@ JWT_TOKEN_SELF = (
     "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 )
 
+# mirror đủ 8 fixtures của src/selftest-fixtures.ts (engine dùng artifact
+# builtin — installer copy đủ dist/rules.json thì 8/8 pass)
 SELF_TEST_FIXTURES = [
     {"name": "aws-key", "input": "AKIAIOSFODNN7EXAMPLE",
      "expectRule": "aws-access-key", "expectBlocked": True},
+    {"name": "openai", "input": "sk-projabcdefghijklmnopqrstuvwx",
+     "expectRule": "openai-api-key", "expectBlocked": True},
+    {"name": "github", "input": "ghp_" + "a1" * 18,
+     "expectRule": "github-pat", "expectBlocked": True},
+    {"name": "db-url", "input": "postgres://u:pw@host/db",
+     "expectRule": "db-url", "expectBlocked": True},
+    {"name": "pem", "input": "-----BEGIN PRIVATE KEY-----",
+     "expectRule": "private-key", "expectBlocked": True},
+    {"name": "slack", "input": "xoxb-123456789012-1234567890123-abcdefghijklmnopqrstuv",
+     "expectRule": "slack-token", "expectBlocked": True},
     {"name": "jwt-warn", "input": JWT_TOKEN_SELF,
      "expectRule": "jwt", "expectBlocked": False},
     {"name": "clean-text", "input": "viết cho tôi hàm quicksort bằng typescript",
@@ -718,8 +735,11 @@ def _read_stdin() -> str:
 
 
 def _reconfigure_streams() -> None:
-    # stderr tiếng Việt — ép utf-8 để không vỡ trên console/pipe cp1252 (windows)
-    for stream in (sys.stdout, sys.stderr):
+    # stdin + stderr tiếng Việt — ép utf-8 để không vỡ trên console/pipe cp1252
+    # (windows). KHÔNG reconfigure stdin thì đọc prompt utf-8 dưới cp1252 ném
+    # UnicodeDecodeError (subclass ValueError) -> fail-open nuốt lỗi -> exit 0
+    # mà KHÔNG quét (silent-skip) — reproducer: PYTHONIOENCODING=cp1252.
+    for stream in (sys.stdin, sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
         except (AttributeError, OSError, ValueError):
