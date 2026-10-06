@@ -14,20 +14,20 @@ const { join } = require("node:path");
 // hook) với resolved cli.js: nhanh hơn npx ~20x và hoạt động trên MỌI platform (kể cả win32 —
 // không cần .cmd, không cần shell). Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ
 // __dirname/../.. (cwd-independent) + cwd. Fallback npx chỉ khi chưa có local install: win32
-// spawn không tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true;
-// posix giữ bare npx như cũ.
+// spawn không tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true
+// (guard() quote sẵn args — xem dưới); posix giữ bare npx như cũ.
 function resolveCmd() {
   for (const base of [join(__dirname, "..", ".."), process.cwd()]) {
     for (const p of [
       join(base, "node_modules", "ai-guard", "dist", "cli.js"),
       join(base, "..", "node_modules", "ai-guard", "dist", "cli.js"),
     ]) {
-      if (existsSync(p)) return { cmd: process.execPath, prefix: [p], shell: false };
+      if (existsSync(p)) return { cmd: process.execPath, prefix: [p] };
     }
   }
   return process.platform === "win32"
-    ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"], shell: true }
-    : { cmd: "npx", prefix: ["--no-install", "ai-guard"], shell: false };
+    ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"] }
+    : { cmd: "npx", prefix: ["--no-install", "ai-guard"] };
 }
 
 // Cline blocking contract (blog v3.36): stdout JSON với cancel=true chặn tool call.
@@ -38,14 +38,25 @@ function block(message) {
 // Spawns the shared CLI (qua fast-path execPath hoặc fallback npx):
 //   ai-guard check-file --tool cline <path>   (stdin: original Cline PreToolUse payload)
 // Exit code 2 = blocked -> in ra {"cancel":true,...} theo contract chặn của Cline.
+// SECURITY: win32 npx.cmd fallback chạy qua cmd.exe (shell:true) — Node KHÔNG quote từng arg
+// khi shell:true, nên arg từ payload (path/--root) chứa metachars (&, |, >...) sẽ bị cmd.exe
+// THỰC THI (command injection). Xây MỘT chuỗi lệnh đã quote sẵn: double-quote mỗi arg + strip
+// quote lồng nhau -> metachars chỉ còn là ký tự literal trong arg.
 function guard(args, input) {
-  const { cmd, prefix, shell } = resolveCmd();
-  const r = spawnSync(cmd, [...prefix, ...args], {
-    input: input ?? "",
-    encoding: "utf8",
-    timeout: 10_000,
-    shell,
-  });
+  const { cmd, prefix } = resolveCmd();
+  const viaShell = process.platform === "win32" && cmd.endsWith(".cmd");
+  const r = viaShell
+    ? spawnSync([cmd, ...prefix, ...args].map((a) => '"' + String(a).replace(/"/g, "") + '"').join(" "), {
+        input: input ?? "",
+        encoding: "utf8",
+        timeout: 10_000,
+        shell: true,
+      })
+    : spawnSync(cmd, [...prefix, ...args], {
+        input: input ?? "",
+        encoding: "utf8",
+        timeout: 10_000,
+      });
   if (r.error) {
     // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được
     console.error("ai-guard: engine không chạy được (" + r.error.message + ") — BỎ QUA kiểm tra (fail-open)");

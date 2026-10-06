@@ -26,7 +26,7 @@ const HOOK_BODY =
     {
       hooks: {
         PreToolUse: [
-          { type: "command", command: "npx --no-install ai-guard check-file --tool copilot", timeout: 15 },
+          { type: "command", command: "npx --no-install ai-guard check-file --tool copilot", timeout: 30 }, // npx fallback ~6-10s lần đầu — 30s headroom, docs default 30
         ],
       },
     },

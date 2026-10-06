@@ -71,6 +71,10 @@ describe("kiro adapter (best-effort hook + steering education)", () => {
     expect(after.ok).toBe(true);
     expect(after.detail).toContain("best-effort");
     expect(after.detail).toContain("kirodotdev/Kiro#7500");
+    // Fix 3 (coordinator): doctor nêu trạng thái steering (ok-logic không đổi)
+    expect(after.detail).toContain("thiếu steering");
+    kiroAdapter.install(root, { instructions: true });
+    expect(kiroAdapter.doctor(root).detail).toContain("steering security.md");
   });
 });
 

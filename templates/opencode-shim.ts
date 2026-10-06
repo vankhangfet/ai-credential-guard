@@ -11,29 +11,40 @@ import { existsSync } from "node:fs";
 // chạy shim) với resolved cli.js: nhanh hơn npx ~20x (verifier đo npx --no-install ~6s/call trên
 // Windows, node dist/cli.js ~300ms) và hoạt động trên MỌI platform (kể cả win32 — không cần
 // .cmd, không cần shell). Fallback npx chỉ khi project chưa có local install: win32 spawn không
-// tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true; posix giữ
-// bare npx như cũ.
-function resolveCmd(): { cmd: string; prefix: string[]; shell: boolean } {
+// tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true (guard() quote
+// sẵn args — xem dưới); posix giữ bare npx như cũ.
+function resolveCmd(): { cmd: string; prefix: string[] } {
   for (const p of ["node_modules/ai-guard/dist/cli.js", "../node_modules/ai-guard/dist/cli.js"]) {
-    if (existsSync(p)) return { cmd: process.execPath, prefix: [p], shell: false };
+    if (existsSync(p)) return { cmd: process.execPath, prefix: [p] };
   }
   return process.platform === "win32"
-    ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"], shell: true }
-    : { cmd: "npx", prefix: ["--no-install", "ai-guard"], shell: false };
+    ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"] }
+    : { cmd: "npx", prefix: ["--no-install", "ai-guard"] };
 }
 
 // Spawns the shared CLI (qua fast-path execPath hoặc fallback npx):
 //   ai-guard check-file --tool <tool> <path>   (tool-side)
 //   ai-guard check-prompt --tool <tool>        (prompt-side)
 // Exit code 2 = blocked -> throw để caller chặn theo cơ chế của event tương ứng.
+// SECURITY: win32 npx.cmd fallback chạy qua cmd.exe (shell:true) — Node KHÔNG quote từng arg
+// khi shell:true, nên arg từ payload (path/--root) chứa metachars (&, |, >...) sẽ bị cmd.exe
+// THỰC THI (command injection). Xây MỘT chuỗi lệnh đã quote sẵn: double-quote mỗi arg + strip
+// quote lồng nhau -> metachars chỉ còn là ký tự literal trong arg.
 function guard(args: string[], input?: string): void {
-  const { cmd, prefix, shell } = resolveCmd();
-  const r = spawnSync(cmd, [...prefix, ...args], {
-    input: input ?? "",
-    encoding: "utf8",
-    timeout: 10_000,
-    shell,
-  });
+  const { cmd, prefix } = resolveCmd();
+  const viaShell = process.platform === "win32" && cmd.endsWith(".cmd");
+  const r = viaShell
+    ? spawnSync([cmd, ...prefix, ...args].map((a) => '"' + String(a).replace(/"/g, "") + '"').join(" "), {
+        input: input ?? "",
+        encoding: "utf8",
+        timeout: 10_000,
+        shell: true,
+      })
+    : spawnSync(cmd, [...prefix, ...args], {
+        input: input ?? "",
+        encoding: "utf8",
+        timeout: 10_000,
+      });
   if (r.error) {
     // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được
     console.error("ai-guard: engine không chạy được (" + r.error.message + ") — BỎ QUA kiểm tra (fail-open)");

@@ -29,7 +29,7 @@ const HOOK_BODY =
           description: "ai-guard (best-effort): chặn đọc credential — payload IDE có thể thiếu tool_input (kirodotdev/Kiro#7500)",
           trigger: "PreToolUse",
           action: { type: "command", command: "npx --no-install ai-guard check-file --tool kiro" },
-          timeout: 15,
+          timeout: 30, // npx fallback có thể mất ~6-10s lần đầu — default 60 là dư, 15 là chặt
         },
       ],
     },
@@ -102,10 +102,15 @@ export const kiroAdapter: AdapterBase = {
       return { ok: false, detail: `thiếu hook ai-guard: ${HOOK_REL} (${BEST_EFFORT})` };
     }
     const ours = readFileSync(hookPath, "utf8").includes(MARKER);
+    // Steering là lớp chính trên Kiro — nêu trạng thái trong detail (không đổi ok-logic,
+    // hook vẫn là mốc ok như các adapter khác).
+    const steeringNote = existsSync(join(root, STEERING_REL))
+      ? " + steering security.md"
+      : " (thiếu steering — chạy lại install với instructions)";
     return {
       ok: ours,
       detail: ours
-        ? `hook PreToolUse đã cài (${BEST_EFFORT})`
+        ? `hook PreToolUse đã cài${steeringNote} (${BEST_EFFORT})`
         : `${HOOK_REL} tồn tại nhưng không phải của ai-guard (${BEST_EFFORT})`,
     };
   },
