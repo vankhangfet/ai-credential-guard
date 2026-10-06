@@ -1,4 +1,7 @@
 import { describe, it, expect } from "vitest";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { mkproject } from "./util/mkproject";
 import { doctor } from "../src/commands/doctor";
 import { selfTest } from "../src/commands/self-test";
@@ -23,5 +26,9 @@ describe("doctor", () => {
     const root = mkproject({ claudeCode: true });
     const code = await doctor(["--root", root]);
     expect(code).toBe(1);
+  });
+  it("không có .ai-guard -> exit 1 + stderr hint", async () => {
+    const nowhere = mkdtempSync(join(tmpdir(), "aig-none-"));
+    expect(await doctor(["--root", nowhere])).toBe(1);
   });
 });

@@ -1,5 +1,5 @@
 import { allAdapters } from "../adapters"; // import barrel để trigger đăng ký adapter
-import { selfTest } from "./self-test";
+import { selfTest, printSelfTest } from "./self-test";
 import { findProjectRoot } from "../root";
 import { loadRules, loadConfig } from "../engine/loader";
 import { flagValue } from "../util/argv";
@@ -16,11 +16,8 @@ export async function doctor(argv: string[]): Promise<number> {
 
   // 1) engine
   const st = selfTest();
-  console.log(`Engine self-test: ${st.total - st.failures.length}/${st.total} pass`);
-  if (st.failures.length) {
-    allOk = false;
-    st.failures.forEach((f) => console.log("  ✗ " + f));
-  }
+  printSelfTest(st, "Engine self-test", "  ");
+  if (st.failures.length) allOk = false;
 
   // 2) rules/config của project
   try {
@@ -33,11 +30,19 @@ export async function doctor(argv: string[]): Promise<number> {
   }
 
   // 3) adapters đang dùng trong project
+  let detectedCount = 0;
   for (const a of allAdapters()) {
-    if (!a.detect(root)) continue;
-    const d = a.doctor(root);
+    let detected = false;
+    try { detected = a.detect(root); } catch { detected = false; }
+    if (!detected) continue;
+    detectedCount++;
+    let d: { ok: boolean; detail: string };
+    try { d = a.doctor(root); } catch (e) { d = { ok: false, detail: String(e) }; }
     console.log(`${d.ok ? "✓" : "✗"} ${a.label}: ${d.detail}`);
     if (!d.ok) allOk = false;
+  }
+  if (detectedCount === 0) {
+    console.log("⚠ Không phát hiện adapter nào — chưa có tool nào được bảo vệ. Chạy `npx ai-guard init`.");
   }
   return allOk ? 0 : 1;
 }

@@ -15,10 +15,9 @@ export async function runCli(argv: string[], input: string): Promise<number> {
     case "doctor":
       return (await import("./commands/doctor")).doctor(argv.slice(1));
     case "self-test": {
-      const { selfTest } = await import("./commands/self-test");
+      const { selfTest, printSelfTest } = await import("./commands/self-test");
       const r = selfTest();
-      r.failures.forEach((f) => console.log("✗ " + f));
-      console.log(`self-test: ${r.total - r.failures.length}/${r.total} pass`);
+      printSelfTest(r);
       return r.failures.length ? 1 : 0;
     }
     default:
