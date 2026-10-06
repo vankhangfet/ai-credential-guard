@@ -4,3 +4,5 @@ dist/
 *.bak
 .ai-guard/logs/
 .ai-guard/.bypass/
+__pycache__/
+*.pyc
