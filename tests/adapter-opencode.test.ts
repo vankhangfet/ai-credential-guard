@@ -36,4 +36,20 @@ describe("opencode adapter", () => {
     opencodeAdapter.install(root, { instructions: false });
     expect(opencodeAdapter.doctor(root).ok).toBe(true);
   });
+  it("doctor: shim file lạ (không marker) -> ok false", () => {
+    const root = mkproject({ opencode: true });
+    require("node:fs").mkdirSync(join(root, ".opencode", "plugins"), { recursive: true });
+    require("node:fs").writeFileSync(join(root, ".opencode", "plugins", "ai-guard.ts"), "export const X = async () => ({});\n");
+    const d = opencodeAdapter.doctor(root);
+    expect(d.ok).toBe(false);
+    expect(d.detail).toContain("không phải của ai-guard");
+  });
+  it("uninstall: shim file lạ (không marker) -> không xóa", () => {
+    const root = mkproject({ opencode: true });
+    require("node:fs").mkdirSync(join(root, ".opencode", "plugins"), { recursive: true });
+    require("node:fs").writeFileSync(join(root, ".opencode", "plugins", "ai-guard.ts"), "export const X = async () => ({});\n");
+    const res = opencodeAdapter.uninstall(root);
+    expect(res.ok).toBe(true);
+    expect(existsSync(join(root, ".opencode", "plugins", "ai-guard.ts"))).toBe(true);
+  });
 });

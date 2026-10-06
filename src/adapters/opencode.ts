@@ -45,6 +45,10 @@ export const opencodeAdapter: AdapterBase = {
     try {
       const dest = join(root, SHIM_FILE);
       if (!existsSync(dest)) return { adapter: "opencode", ok: true, detail: "không có shim — không có gì để gỡ" };
+      // Chỉ xóa file của mình: shim lạ (không marker) tại đúng path đó thì giữ nguyên.
+      if (!readFileSync(dest, "utf8").includes(MARKER)) {
+        return { adapter: "opencode", ok: true, detail: "file không phải của ai-guard — không xóa" };
+      }
       rmSync(dest);
       // GIỮ AGENTS.md (đánh dấu follow-up; nhất quán với claude-code hiện tại).
       return { adapter: "opencode", ok: true, detail: "shim ai-guard đã gỡ (AGENTS.md giữ nguyên)" };

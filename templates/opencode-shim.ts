@@ -5,16 +5,34 @@
 //     UserMessage has NO nested parts; text lives in sibling output.parts[] as { type: "text", text }.
 // Runs under Bun (OpenCode bundles it) — node:child_process is supported.
 import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 
-// Spawns the shared CLI via npx (resolves the project-local install, same contract as other adapters):
-//   npx --no-install ai-guard check-file --tool opencode <path>   (from tool.execute.before)
-//   npx --no-install ai-guard check-prompt --tool opencode        (from chat.message)
+// Fast-path: cài local qua `npm i -D ai-guard` — chạy node trực tiếp (nhanh hơn npx ~20x;
+// verifier đo npx --no-install ~6s/call trên Windows, node dist/cli.js ~300ms).
+// npx --no-install ai-guard chỉ là fallback khi project chưa có local install.
+function resolveCmd(): { cmd: string; prefix: string[] } {
+  for (const p of ["node_modules/ai-guard/dist/cli.js", "../node_modules/ai-guard/dist/cli.js"]) {
+    if (existsSync(p)) return { cmd: "node", prefix: [p] };
+  }
+  return { cmd: "npx", prefix: ["--no-install", "ai-guard"] };
+}
+
+// Spawns the shared CLI (qua fast-path node hoặc fallback npx):
+//   ai-guard check-file --tool opencode <path>   (from tool.execute.before)
+//   ai-guard check-prompt --tool opencode        (from chat.message)
 // Exit code 2 = blocked -> throw so OpenCode surfaces the error and aborts the action.
 function guard(args: string[], input?: string): void {
-  const r = spawnSync("npx", ["--no-install", "ai-guard", ...args], {
+  const { cmd, prefix } = resolveCmd();
+  const r = spawnSync(cmd, [...prefix, ...args], {
     input: input ?? "",
     encoding: "utf8",
+    timeout: 10_000,
   });
+  if (r.error) {
+    // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được
+    console.error("ai-guard: engine không chạy được (" + r.error.message + ") — BỎ QUA kiểm tra (fail-open)");
+    return;
+  }
   if (r.status === 2) throw new Error((r.stderr || "ai-guard: blocked").trim());
 }
 
@@ -35,6 +53,7 @@ export const AiGuardOpenCode = async () => ({
     }
   },
   // Fires when a new (user) message is received. Extract text parts from output.parts.
+  // lưu ý: docs chỉ chứng minh throw chặn được tool.execute.before; nếu chat.message throw không abort được thì prompt-side là best-effort
   "chat.message": async (_input: any, output: any) => {
     const text: string = (Array.isArray(output?.parts) ? output.parts : [])
       .filter((p: any) => p?.type === "text" && typeof p.text === "string")
