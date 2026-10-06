@@ -84,4 +84,8 @@ describe("check-file stdin payload (Codex apply_patch)", () => {
     const payload = JSON.stringify({ tool_name: "apply_patch", tool_input: { input: "*** Begin Patch\n*** Update File: .env\n@@\n-a\n+b\n*** End Patch" } });
     expect(await runCli(["check-file", "--root", root, "--tool", "codex"], payload)).toBe(2);
   });
+  it("patch nhiều file: .env KHÔNG ở cuối vẫn chặn (ordering bypass regression)", async () => {
+    const payload = JSON.stringify({ tool_name: "apply_patch", tool_input: { input: "*** Begin Patch\n*** Update File: .env\n@@\n-a\n+b\n*** Update File: readme.md\n@@\n-x\n+y\n*** End Patch" } });
+    expect(await runCli(["check-file", "--root", root, "--tool", "codex"], payload)).toBe(2);
+  });
 });
