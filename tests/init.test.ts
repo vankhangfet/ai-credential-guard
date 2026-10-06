@@ -25,7 +25,7 @@ describe("init", () => {
     const rules = JSON.parse(readFileSync(join(root, ".ai-guard", "rules.json"), "utf8"));
     expect(rules.add[0].id).toBe("x");
   });
-  it.skip("cài hook cho tool phát hiện được khi không truyền --tools (mở lại ở Task 18 khi codex adapter tồn tại)", async () => {
+  it("cài hook cho tool phát hiện được khi không truyền --tools", async () => {
     const root = mkproject({ claudeCode: true, codex: true });
     const res = await init(["--root", root], "");
     expect(res).toBe(0);
