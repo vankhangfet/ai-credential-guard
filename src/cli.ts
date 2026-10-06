@@ -14,6 +14,8 @@ export async function runCli(argv: string[], input: string): Promise<number> {
       return (await import("./commands/init")).init(argv.slice(1), input);
     case "doctor":
       return (await import("./commands/doctor")).doctor(argv.slice(1));
+    case "uninstall":
+      return (await import("./commands/uninstall")).uninstall(argv.slice(1));
     case "self-test": {
       const { selfTest, printSelfTest } = await import("./commands/self-test");
       const r = selfTest();
