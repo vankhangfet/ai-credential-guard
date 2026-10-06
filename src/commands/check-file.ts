@@ -6,6 +6,9 @@ import { appendAuditEvent } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { flagValue } from "../util/argv";
 
+// apply_patch (Codex): path nằm trong patch text — "*** Update File: <path>" ở header mỗi hunk; lấy match CUỐI CÙNG.
+const PATCH_FILE_RE = /\*\*\* (?:Update|Add|Delete) File: ([^\n]+)/g;
+
 function extractPath(argv: string[], input: string): string | null {
   // heuristic: loại giá trị của flag ra khỏi positional — các flag tương lai PHẢI nhận giá trị (dạng --flag value), flag boolean sẽ cần cập nhật đây
   const flagVals = new Set<string>();
@@ -21,7 +24,19 @@ function extractPath(argv: string[], input: string): string | null {
       // v1: tool_input.path là thư mục (Grep/Glob base) chỉ chặn nếu chính tên thư mục match pattern; không liệt kê file con
       const ti = j?.tool_input ?? {};
       const p = [ti.file_path, ti.notebook_path, ti.path, j?.path].find((v) => typeof v === "string");
-      return typeof p === "string" ? p : null;
+      if (typeof p === "string") return p;
+      // không có field path trực tiếp — quét patch text (apply_patch: tool_input.input; biến thể: command/patch)
+      for (const key of ["input", "command", "patch"]) {
+        const v = ti[key] ?? j?.[key];
+        if (typeof v === "string") {
+          let m: RegExpExecArray | null;
+          let last: string | null = null;
+          PATCH_FILE_RE.lastIndex = 0;
+          while ((m = PATCH_FILE_RE.exec(v)) !== null) last = m[1].trim();
+          if (last) return last;
+        }
+      }
+      return null;
     } catch { return null; }
   }
   return null;

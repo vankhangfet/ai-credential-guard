@@ -16,6 +16,7 @@ describe("codex adapter", () => {
     const raw = readFileSync(join(root, ".codex", "hooks.json"), "utf8");
     expect(raw).toContain("UserPromptSubmit");
     expect(raw).toContain("PreToolUse");
+    expect(raw).toContain("apply_patch");
     expect((raw.match(/ai-guard check-prompt/g) ?? []).length).toBe(1);
   });
   it("install tạo AGENTS.md education khi instructions bật (idempotent)", () => {
@@ -51,5 +52,12 @@ describe("codex adapter", () => {
     expect(codexAdapter.doctor(root).ok).toBe(false);
     codexAdapter.install(root, { instructions: false });
     expect(codexAdapter.doctor(root).ok).toBe(true);
+  });
+  it("entry malform (thiếu hooks array) không làm doctor throw", () => {
+    const root = mkproject({ codex: true });
+    mkdirSync(join(root, ".codex"), { recursive: true });
+    writeFileSync(join(root, ".codex", "hooks.json"), JSON.stringify({ hooks: { UserPromptSubmit: [{ matcher: "x" }] } }));
+    expect(() => codexAdapter.doctor(root)).not.toThrow();
+    expect(codexAdapter.doctor(root).ok).toBe(false);
   });
 });

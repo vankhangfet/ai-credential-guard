@@ -1,35 +1,13 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { AdapterBase, InstallOptions, InstallResult } from "./types";
-import { MARKER, readJson, writeJson } from "../util/json-config";
+import { readJson, writeJson } from "../util/json-config";
+import { appendMarkedSection, entriesWithMarker, stripMarkerEntries, templatePath, type HookEntry } from "./hooks-json";
 
-interface HookEntry { matcher?: string; hooks?: Array<{ type: string; command: string }> }
 interface ClaudeSettings { permissions?: unknown; hooks?: Record<string, HookEntry[]>; [k: string]: unknown }
 
 const CMD_PROMPT = "npx --no-install ai-guard check-prompt --tool claude-code";
 const CMD_FILE = "npx --no-install ai-guard check-file --tool claude-code";
-
-function entriesWithMarker(list: HookEntry[] | undefined, cmdPart: string): boolean {
-  return !!list?.some((e) => (e.hooks ?? []).some((h) => h.command.includes(MARKER) && h.command.includes(cmdPart)));
-}
-
-// src: <repo>/src/adapters -> ../../templates; dist: <pkg>/dist/adapters -> ../../templates.
-// Fallback ../../../templates cho layout thay thế (vd. dist bundled sâu hơn một tầng).
-function templatePath(): string {
-  const primary = join(__dirname, "..", "..", "templates", "claude-instructions.md");
-  if (existsSync(primary)) return primary;
-  return join(__dirname, "..", "..", "..", "templates", "claude-instructions.md");
-}
-
-// Atomic install: đọc template + kiểm tra marker TRƯỚC khi mutate settings.json.
-// Trả về nội dung cần ghi vào CLAUDE.md, hoặc null nếu không cần ghi (đã có section).
-function prepareInstruction(root: string): string | null {
-  const template = readFileSync(templatePath(), "utf8");
-  const file = join(root, "CLAUDE.md");
-  const current = existsSync(file) ? readFileSync(file, "utf8") : "";
-  if (current.includes("<!-- ai-guard:start -->")) return null;
-  return current + (current && !current.endsWith("\n") ? "\n" : "") + template;
-}
 
 export const claudeCodeAdapter: AdapterBase = {
   id: "claude-code",
@@ -48,7 +26,16 @@ export const claudeCodeAdapter: AdapterBase = {
       if (!entriesWithMarker(settings.hooks.PreToolUse, "check-file")) {
         settings.hooks.PreToolUse.push({ matcher: "Read|Glob|Grep", hooks: [{ type: "command", command: CMD_FILE }] });
       }
-      const instruction = opts.instructions ? prepareInstruction(root) : null;
+      // Atomic install: tính nội dung CLAUDE.md TRƯỚC khi mutate settings.json.
+      const instruction = opts.instructions
+        ? appendMarkedSection(
+            join(root, "CLAUDE.md"),
+            readFileSync(templatePath(
+              join(__dirname, "..", "..", "templates", "claude-instructions.md"),
+              join(__dirname, "..", "..", "..", "templates", "claude-instructions.md"),
+            ), "utf8"),
+          )
+        : null;
       writeJson(file, settings);
       if (instruction !== null) writeFileSync(join(root, "CLAUDE.md"), instruction);
       return { adapter: "claude-code", ok: true, detail: "hooks UserPromptSubmit + PreToolUse đã đăng ký" };
@@ -63,8 +50,9 @@ export const claudeCodeAdapter: AdapterBase = {
       const settings = readJson<ClaudeSettings>(file, {});
       if (settings.hooks) {
         for (const ev of Object.keys(settings.hooks)) {
-          settings.hooks[ev] = (settings.hooks[ev] ?? []).filter((e) => !(e.hooks ?? []).some((h) => h.command.includes(MARKER)));
-          if (settings.hooks[ev].length === 0) delete settings.hooks[ev];
+          const kept = stripMarkerEntries(settings.hooks[ev] ?? []);
+          if (kept.length === 0) delete settings.hooks[ev];
+          else settings.hooks[ev] = kept;
         }
         if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
       }

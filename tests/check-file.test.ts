@@ -78,3 +78,10 @@ describe("check-file stdin payload (Claude Code PreToolUse)", () => {
     expect(await runCli(["check-file", "--root", root, "--tool", "claude-code"], payload)).toBe(2);
   });
 });
+
+describe("check-file stdin payload (Codex apply_patch)", () => {
+  it("apply_patch payload (Codex) -> trích path từ patch header", async () => {
+    const payload = JSON.stringify({ tool_name: "apply_patch", tool_input: { input: "*** Begin Patch\n*** Update File: .env\n@@\n-a\n+b\n*** End Patch" } });
+    expect(await runCli(["check-file", "--root", root, "--tool", "codex"], payload)).toBe(2);
+  });
+});
