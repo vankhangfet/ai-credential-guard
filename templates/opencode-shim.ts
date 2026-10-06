@@ -34,6 +34,11 @@ function guard(args: string[], input?: string): void {
     return;
   }
   if (r.status === 2) throw new Error((r.stderr || "ai-guard: blocked").trim());
+  if (r.status !== 0) {
+    // engine crash / resolution fail — fail-open nhưng PHẢI thấy được
+    console.error("ai-guard: engine exited " + r.status + " — " + (r.stderr || "").trim());
+    return;
+  }
 }
 
 // Plugin shape per docs: a plugin file exports one or more plugin functions
