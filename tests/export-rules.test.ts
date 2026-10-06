@@ -8,9 +8,11 @@ describe("buildRulesArtifact", () => {
     expect(arr.length).toBe(builtInRules.length);
     for (const r of arr) {
       expect(typeof r.id).toBe("string");
+      expect(typeof r.pattern).toBe("string");
       expect(["block", "warn"]).toContain(r.severity);
       expect(typeof r.description).toBe("string");
       expect("re" in r).toBe(false);
     }
+    expect(arr.filter((r) => "builtin" in r).length).toBeGreaterThanOrEqual(2);
   });
 });

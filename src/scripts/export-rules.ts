@@ -4,6 +4,7 @@ import { builtInRules } from "../engine/rules";
 import type { Rule } from "../types";
 
 export function buildRulesArtifact(): Rule[] {
+  // mirror contract: exactly these 5 fields — update engine.py loader if changed
   return builtInRules.map(({ id, severity, pattern, description, builtin }) =>
     builtin ? { id, severity, pattern, description, builtin } : { id, severity, pattern, description });
 }
