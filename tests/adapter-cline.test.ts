@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { spawnSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { mkproject } from "./util/mkproject";
 import { clineAdapter } from "../src/adapters/cline";
@@ -112,4 +113,45 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('"cancel":true');
   });
+  it.skipIf(!existsSync(DIST_CLI) || process.platform !== "win32")(
+    "fallback npx.cmd shell branch: bare token + quoted args (spaced path intact, injection neutralized)",
+    () => {
+      // Shadow npx.cmd bằng stub prepend lên PATH của RIÊNG spawn này: shell branch của template
+      // gọi stub thay vì npx thật -> log ghi lại ĐÚNG những gì cmd.exe truyền sau khi parse dòng
+      // lệnh đã quote (stub chạy được cũng chứng minh token lệnh BARE resolve qua PATH).
+      const stubDir = mkdtempSync(join(tmpdir(), "aig-stub-"));
+      const logFile = join(stubDir, "args.log");
+      writeFileSync(join(stubDir, "npx.cmd"), '@echo off\r\n>>"%AIG_STUB_LOG%" echo %*\r\nexit /b 0\r\n');
+      const env: NodeJS.ProcessEnv = { ...process.env };
+      const pathKey = Object.keys(env).find((k) => k.toUpperCase() === "PATH") ?? "PATH";
+      env[pathKey] = stubDir + ";" + (env[pathKey] ?? "");
+      env.AIG_STUB_LOG = logFile;
+
+      // tmp project KHÔNG có node_modules/ai-guard (bỏ qua mkExecProject) -> fallback npx.cmd.
+      const root = mkproject({ cline: true });
+      clineAdapter.install(root, { instructions: false });
+
+      // 1) path có space phải đến stub NGUYÊN VẸN như MỘT arg đã quote
+      const spaced = join(root, "my dir", "sub space", ".env");
+      const r1 = spawnSync(process.execPath, [join(root, PRE)], {
+        input: JSON.stringify({ tool_name: "read_file", tool_input: { path: spaced }, workspaceRoots: [root] }),
+        encoding: "utf8", timeout: 60_000, cwd: root, env,
+      });
+      expect(r1.status).toBe(0);
+      const log = readFileSync(logFile, "utf8");
+      expect(log.startsWith('"--no-install" "ai-guard"')).toBe(true);
+      expect(log).toContain('"--tool" "cline"');
+      expect(log).toContain(`"${spaced}"`);
+
+      // 2) injection payload: metachars (&, >) chỉ còn literal TRONG quote của arg — không execute
+      const pwnFile = join(root, "PWNED.txt");
+      const r2 = spawnSync(process.execPath, [join(root, PRE)], {
+        input: JSON.stringify({ tool_name: "read_file", tool_input: { path: `x&echo PWNED>${pwnFile}` }, workspaceRoots: [root] }),
+        encoding: "utf8", timeout: 60_000, cwd: root, env,
+      });
+      expect(r2.status).toBe(0);
+      expect(readFileSync(logFile, "utf8")).toContain('"x&echo PWNED>');
+      expect(existsSync(pwnFile)).toBe(false);
+    },
+  );
 });

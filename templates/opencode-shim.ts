@@ -28,13 +28,18 @@ function resolveCmd(): { cmd: string; prefix: string[] } {
 // Exit code 2 = blocked -> throw để caller chặn theo cơ chế của event tương ứng.
 // SECURITY: win32 npx.cmd fallback chạy qua cmd.exe (shell:true) — Node KHÔNG quote từng arg
 // khi shell:true, nên arg từ payload (path/--root) chứa metachars (&, |, >...) sẽ bị cmd.exe
-// THỰC THI (command injection). Xây MỘT chuỗi lệnh đã quote sẵn: double-quote mỗi arg + strip
-// quote lồng nhau -> metachars chỉ còn là ký tự literal trong arg.
+// THỰC THI (command injection). Xây MỘT chuỗi lệnh đã quote sẵn: token lệnh (index 0) để BARE —
+// quote "npx.cmd" phá self-location của batch wrapper (npm dùng %~dp0); các arg còn lại được
+// double-quote + strip `"` và `%` (chặn cả %VAR% expansion trong quotes) -> metachars chỉ còn
+// là ký tự literal trong arg.
 function guard(args: string[], input?: string): void {
   const { cmd, prefix } = resolveCmd();
   const viaShell = process.platform === "win32" && cmd.endsWith(".cmd");
+  const line = [cmd, ...prefix, ...args]
+    .map((a, i) => (i === 0 ? String(a) : '"' + String(a).replace(/["%]/g, "") + '"'))
+    .join(" ");
   const r = viaShell
-    ? spawnSync([cmd, ...prefix, ...args].map((a) => '"' + String(a).replace(/"/g, "") + '"').join(" "), {
+    ? spawnSync(line, {
         input: input ?? "",
         encoding: "utf8",
         timeout: 10_000,
