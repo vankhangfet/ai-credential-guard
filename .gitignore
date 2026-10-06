@@ -6,3 +6,4 @@ dist/
 .ai-guard/.bypass/
 __pycache__/
 *.pyc
+fallback/rules.json

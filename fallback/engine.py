@@ -605,7 +605,10 @@ def cmd_allow(args: list) -> int:
     root = root_val if root_val is not None else os.getcwd()
     project_root = find_root(root)
     if project_root is None:
-        sys.stderr.write("ai-guard: không tìm thấy .ai-guard — chạy `npx ai-guard init` trước.\n")
+        # no-root hint: máy không-npm chạy installer fallback (chính installer tạo .ai-guard)
+        sys.stderr.write(
+            "ai-guard: không tìm thấy .ai-guard — chạy install.sh/install.ps1 (fallback) "
+            "hoặc `npx ai-guard init` (nếu có npm).\n")
         return 1
     scope = args[0] if args else None
     if scope not in ("prompt", "file"):
