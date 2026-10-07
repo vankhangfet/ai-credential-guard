@@ -1,0 +1,55 @@
+name: CI
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  node:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [20, 22]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "${{ matrix.node }}" }
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm test
+      - run: npm run build
+      - name: dist/rules.json artifact tồn tại và đủ rules
+        run: node -e "const r=require('./dist/rules.json'); if(!Array.isArray(r)||r.length<40) process.exit(1); console.log('rules:',r.length)"
+        shell: bash
+
+  python:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: python -m unittest discover -s fallback/tests -t . -v
+
+  installers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash -n fallback/install.sh
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run build
+      - name: copy rules artifact cho installer
+        run: cp dist/rules.json fallback/rules.json
+      - name: installer smoke (bash, python3 có sẵn trên runner)
+        run: |
+          TMP=$(mktemp -d) && mkdir -p "$TMP/.claude" "$TMP/.codex" "$TMP/.ai-guard"
+          printf '{}' > "$TMP/.claude/settings.json"
+          printf '{"hooks":{}}' > "$TMP/.codex/hooks.json"
+          cd "$TMP" && bash "$GITHUB_WORKSPACE/fallback/install.sh"
+          grep -q "check-prompt" "$TMP/.claude/settings.json"
+          grep -q "check-file" "$TMP/.codex/hooks.json"
+          echo "INSTALLER_SMOKE_OK"
