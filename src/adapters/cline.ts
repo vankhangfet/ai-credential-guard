@@ -44,7 +44,7 @@ export const clineAdapter: AdapterBase = {
         return {
           adapter: "cline",
           ok: false,
-          detail: `hook user đã tồn tại (không ghi đè): ${foreign.map((f) => f.slice(root.length + 1)).join(", ")} — gộp thủ công rồi chạy lại`,
+          detail: `user hook already exists (not overwriting): ${foreign.map((f) => f.slice(root.length + 1)).join(", ")} — merge manually and re-run`,
         };
       }
       for (const h of HOOKS) {
@@ -60,7 +60,7 @@ export const clineAdapter: AdapterBase = {
       return {
         adapter: "cline",
         ok: true,
-        detail: "hooks PreToolUse + UserPromptSubmit đã cài (.clinerules/hooks/, yêu cầu Cline ≥3.36 + bật Features > Hooks)",
+        detail: "hooks PreToolUse + UserPromptSubmit installed (.clinerules/hooks/, requires Cline >=3.36 + enable Features > Hooks)",
       };
     } catch (e) {
       return { adapter: "cline", ok: false, detail: String(e) };
@@ -80,7 +80,7 @@ export const clineAdapter: AdapterBase = {
       return {
         adapter: "cline",
         ok: true,
-        detail: removed ? `hooks ai-guard đã gỡ (${removed} file)` : "không có hook ai-guard — không có gì để gỡ",
+        detail: removed ? `ai-guard hooks removed (${removed} file(s))` : "no ai-guard hooks — nothing to remove",
       };
     } catch (e) {
       return { adapter: "cline", ok: false, detail: String(e) };
@@ -89,12 +89,12 @@ export const clineAdapter: AdapterBase = {
   doctor(root: string) {
     const missing = HOOKS.filter((h) => !existsSync(join(root, ...h.rel))).map((h) => h.rel.join("/"));
     if (missing.length) {
-      return { ok: false, detail: `thiếu hook ai-guard: ${missing.join(", ")} trong .clinerules/hooks/` };
+      return { ok: false, detail: `missing ai-guard hooks: ${missing.join(", ")} in .clinerules/hooks/` };
     }
     const foreign = HOOKS.filter((h) => !readFileSync(join(root, ...h.rel), "utf8").includes(MARKER)).map((h) => h.rel.join("/"));
     if (foreign.length) {
-      return { ok: false, detail: `${foreign.join(", ")} tồn tại nhưng không phải của ai-guard` };
+      return { ok: false, detail: `${foreign.join(", ")} exist but do not belong to ai-guard` };
     }
-    return { ok: true, detail: "hooks đã cài (.clinerules/hooks/)" };
+    return { ok: true, detail: "hooks installed (.clinerules/hooks/)" };
   },
 };

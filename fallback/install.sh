@@ -7,7 +7,7 @@ ROOT="$(pwd)"
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if ! command -v python3 >/dev/null 2>&1; then
-  echo "ai-guard: cần python3 (không tìm thấy). Cài Python 3 rồi chạy lại (trên Windows dùng install.ps1)." >&2
+  echo "ai-guard: python3 required but not found. Install Python 3 and re-run. (On Windows use install.ps1)" >&2
   exit 1
 fi
 
@@ -17,7 +17,7 @@ cp "$SRC/engine.py" "$ROOT/.ai-guard/bin/engine.py"
 if [ -f "$SRC/rules.json" ]; then
   cp "$SRC/rules.json" "$ROOT/.ai-guard/bin/rules.json"
 else
-  echo "ai-guard: CẢNH BÁO — thiếu $SRC/rules.json (build artifact). Engine chỉ còn heuristic warn (KHÔNG chặn) cho tới khi copy dist/rules.json vào fallback/rules.json rồi chạy lại." >&2
+  echo "ai-guard: WARNING — missing $SRC/rules.json (build artifact). Engine will run in warn-only heuristic mode (NO blocking) until dist/rules.json is copied to fallback/rules.json and re-run." >&2
 fi
 
 # 2) gitignore idempotent
@@ -91,10 +91,10 @@ fi
 
 # 4) guard: chưa thấy tool nào -> warn nhưng vẫn exit 0 (engine đã copy sẵn)
 if [ "$REGISTERED" -eq 0 ]; then
-  echo "ai-guard: CẢNH BÁO — không tìm thấy .claude/.codex — chắc chắn chạy từ thư mục dự án? (engine đã copy vào .ai-guard/bin nhưng chưa đăng ký hook nào)" >&2
+  echo "ai-guard: WARNING — no .claude/.codex found — make sure you are running from the project root? (engine copied to .ai-guard/bin but no hooks registered)" >&2
 fi
 
 echo ""
-echo "ai-guard fallback installed tại $ROOT/.ai-guard/bin"
-echo "Chế độ fallback: claude-code + codex; đầy đủ 7 tool: dùng npm (npx ai-guard init)."
-echo "Kiểm tra: echo 'test sạch' | $ENG check-prompt --root \"$ROOT\""
+echo "ai-guard fallback installed at $ROOT/.ai-guard/bin"
+echo "Fallback mode: claude-code + codex only; for all 7 tools use npm (npx ai-guard init)."
+echo "Verify: echo 'clean test' | $ENG check-prompt --root \"$ROOT\""

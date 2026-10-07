@@ -5,7 +5,7 @@ import type { InstallResult } from "../adapters/types";
 import { flagValue } from "../util/argv";
 
 const DEFAULT_RULES = {
-  add: [{ id: "example-internal", severity: "block", pattern: "CORP-[A-Z0-9]{8,}", description: "Ví dụ: đổi thành format token nội bộ của bạn" }],
+  add: [{ id: "example-internal", severity: "block", pattern: "CORP-[A-Z0-9]{8,}", description: "Example: replace with your internal token format" }],
   override: {},
   remove: [],
 };
@@ -20,13 +20,13 @@ export async function init(argv: string[], _input: string): Promise<number> {
   const detected = adapters.filter((a) => (wanted ? wanted.includes(a.id) : a.detect(root)));
   const unknown = wanted ? wanted.filter((w) => !adapters.some((a) => a.id === w)) : [];
   if (unknown.length) {
-    process.stderr.write(`ai-guard: --tools chứa id không hỗ trợ: ${unknown.join(", ")} (hỗ trợ: ${adapters.map((a) => a.id).join(", ")})\n`);
+    process.stderr.write(`ai-guard: --tools contains unsupported id(s): ${unknown.join(", ")} (supported: ${adapters.map((a) => a.id).join(", ")})\n`);
   }
   if (!detected.length) {
     process.stderr.write([
-      "ai-guard: không phát hiện AI tool nào trong dự án.",
-      "Dấu hiệu được kiểm tra: .claude, .codex, .opencode, .pi, .cline, .kiro, .vscode",
-      "Dùng: npx ai-guard init --tools claude-code,codex,opencode,pi,cline,kiro,copilot",
+      "ai-guard: no AI tools detected in this project.",
+      "Checked for: .claude, .codex, .opencode, .pi, .cline, .kiro, .vscode",
+      "Use: npx ai-guard init --tools claude-code,codex,opencode,pi,cline,kiro,copilot",
     ].join("\n") + "\n");
     return 1;
   }
@@ -52,11 +52,11 @@ export async function init(argv: string[], _input: string): Promise<number> {
   }
 
   // 4) summary
-  console.log("ai-guard: đã khởi tạo.");
+  console.log("ai-guard: initialized.");
   for (const r of results) console.log(`  ${r.ok ? "✓" : "✗"} ${r.adapter}: ${r.detail}`);
-  console.log("  Cấu hình rule: .ai-guard/rules.json — audit log: .ai-guard/logs/");
-  console.log("  Lưu ý: rules.json có rule demo 'example-internal' (CORP-*) đang bật — sửa/xoá theo nhu cầu.");
-  console.log("  Kiểm tra: npx ai-guard doctor");
-  console.log("  Lưu ý: thêm ai-credential-guard vào devDependencies (npm i -D ai-credential-guard) để hook chạy mà không cần mạng.");
+  console.log("  Rule config: .ai-guard/rules.json — audit log: .ai-guard/logs/");
+  console.log("  Note: rules.json ships a demo rule 'example-internal' (CORP-*) enabled — edit or remove as needed.");
+  console.log("  Verify: npx ai-guard doctor");
+  console.log("  Note: add ai-credential-guard to devDependencies (npm i -D ai-credential-guard) so hooks run without network.");
   return results.some((r) => !r.ok) ? 1 : 0;
 }

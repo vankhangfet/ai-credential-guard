@@ -9,7 +9,7 @@ export async function doctor(argv: string[]): Promise<number> {
   const start = flagValue(argv, "--root") ?? process.cwd();
   const root = findProjectRoot(start);
   if (!root) {
-    process.stderr.write("ai-guard: không tìm thấy .ai-guard — chạy `npx ai-guard init`.\n");
+    process.stderr.write("ai-guard: no .ai-guard found — run `npx ai-guard init`.\n");
     return 1;
   }
   let allOk = true;
@@ -26,7 +26,7 @@ export async function doctor(argv: string[]): Promise<number> {
     console.log(`Rules: ${rules.length} (sensitive paths: ${cfg.sensitivePaths?.length ?? 0})`);
   } catch (e) {
     allOk = false;
-    console.log("  ✗ lỗi load rules/config: " + e);
+    console.log("  ✗ failed to load rules/config: " + e);
   }
 
   // 3) adapters đang dùng trong project
@@ -42,7 +42,7 @@ export async function doctor(argv: string[]): Promise<number> {
     if (!d.ok) allOk = false;
   }
   if (detectedCount === 0) {
-    console.log("⚠ Không phát hiện adapter nào — chưa có tool nào được bảo vệ. Chạy `npx ai-guard init`.");
+    console.log("⚠ No adapters detected — nothing is hooked. Run `npx ai-guard init`.");
   }
   return allOk ? 0 : 1;
 }

@@ -24,7 +24,7 @@ describe("findProjectRoot", () => {
     try { expect(findProjectRoot(join(tmpdir()))).toBe(root); }
     finally { delete process.env.AI_GUARD_ROOT; }
   });
-  it("không tìm thấy -> null", () => {
+  it("not found -> null", () => {
     const nowhere = mkdtempSync(join(tmpdir(), "aig-none-"));
     expect(findProjectRoot(nowhere)).toBeNull();
   });

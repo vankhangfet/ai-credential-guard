@@ -46,7 +46,7 @@ export function makeShimAdapter(spec: ShimAdapterSpec): AdapterBase {
         mkdirSync(dirname(dest), { recursive: true });
         writeFileSync(dest, shim);
         if (instruction !== null && instrFile) writeFileSync(join(root, instrFile), instruction);
-        return { adapter: spec.id, ok: true, detail: `shim ${shimFile} đã cài` };
+        return { adapter: spec.id, ok: true, detail: `shim ${shimFile} installed` };
       } catch (e) {
         return { adapter: spec.id, ok: false, detail: String(e) };
       }
@@ -54,23 +54,23 @@ export function makeShimAdapter(spec: ShimAdapterSpec): AdapterBase {
     uninstall(root: string): InstallResult {
       try {
         const dest = join(root, shimFile);
-        if (!existsSync(dest)) return { adapter: spec.id, ok: true, detail: "không có shim — không có gì để gỡ" };
+        if (!existsSync(dest)) return { adapter: spec.id, ok: true, detail: "no shim — nothing to remove" };
         // Chỉ xóa file của mình: shim lạ (không marker) tại đúng path đó thì giữ nguyên.
         if (!readFileSync(dest, "utf8").includes(MARKER)) {
-          return { adapter: spec.id, ok: true, detail: "file không phải của ai-guard — không xóa" };
+          return { adapter: spec.id, ok: true, detail: "file does not belong to ai-guard — not removing" };
         }
         rmSync(dest);
         // GIỮ education file (đánh dấu follow-up; nhất quán với claude-code hiện tại).
-        return { adapter: spec.id, ok: true, detail: `shim ai-guard đã gỡ (${spec.instructionsFile ?? "AGENTS.md"} giữ nguyên)` };
+        return { adapter: spec.id, ok: true, detail: `ai-guard shim removed (${spec.instructionsFile ?? "AGENTS.md"} kept)` };
       } catch (e) {
         return { adapter: spec.id, ok: false, detail: String(e) };
       }
     },
     doctor(root: string) {
       const dest = join(root, shimFile);
-      if (!existsSync(dest)) return { ok: false, detail: `thiếu shim ${shimFile}` };
+      if (!existsSync(dest)) return { ok: false, detail: `missing shim ${shimFile}` };
       const ok = readFileSync(dest, "utf8").includes(MARKER);
-      return { ok, detail: ok ? "shim đã cài" : `${shimFile} tồn tại nhưng không phải của ai-guard` };
+      return { ok, detail: ok ? "shim installed" : `${shimFile} exists but does not belong to ai-guard` };
     },
   };
 }

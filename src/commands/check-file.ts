@@ -67,9 +67,9 @@ export async function checkFile(argv: string[], input: string): Promise<number> 
     appendAuditEvent(projectRoot, { ts: new Date().toISOString(), tool, event: "file", action: "blocked", path: rel });
     process.stderr.write(
       [
-        "ai-guard: ĐÃ CHẶN — file nhạy cảm (chưa cho AI đọc/ghi).",
+        "ai-guard: BLOCKED — sensitive file (AI not allowed to read/write).",
         `  • Path: ${rel}`,
-        "Nếu bạn CỐ Ý muốn cho phép file này, chạy:",
+        "If you INTENTIONALLY want to allow this file, run:",
         `  npx ai-guard allow file ${rel} --10m`,
       ].join("\n") + "\n"
     );

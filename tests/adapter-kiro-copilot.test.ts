@@ -72,7 +72,7 @@ describe("kiro adapter (best-effort hook + steering education)", () => {
     expect(after.detail).toContain("best-effort");
     expect(after.detail).toContain("kirodotdev/Kiro#7500");
     // Fix 3 (coordinator): doctor nêu trạng thái steering (ok-logic không đổi)
-    expect(after.detail).toContain("thiếu steering");
+    expect(after.detail).toContain("missing steering");
     kiroAdapter.install(root, { instructions: true });
     expect(kiroAdapter.doctor(root).detail).toContain("steering security.md");
   });
@@ -126,6 +126,6 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     const d = copilotAdapter.doctor(root);
     expect(d.ok).toBe(true);
     expect(d.detail).toContain("education layer");
-    expect(d.detail).toContain("không chặn được");
+    expect(d.detail).toContain("prompt side cannot be blocked");
   });
 });

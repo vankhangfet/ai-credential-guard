@@ -45,7 +45,7 @@ export const copilotAdapter: AdapterBase = {
       // riêng; file lạ (không marker) chiếm slot -> từ chối ghi đè.
       const hookPath = join(root, HOOK_REL);
       if (REGISTER_HOOK && existsSync(hookPath) && !readFileSync(hookPath, "utf8").includes(MARKER)) {
-        return { adapter: "copilot", ok: false, detail: `${HOOK_REL} tồn tại nhưng không phải của ai-guard — không ghi đè` };
+        return { adapter: "copilot", ok: false, detail: `${HOOK_REL} exists but does not belong to ai-guard — not overwriting` };
       }
       const instruction = opts.instructions
         ? appendMarkedSection(
@@ -68,8 +68,8 @@ export const copilotAdapter: AdapterBase = {
         adapter: "copilot",
         ok: true,
         detail: REGISTER_HOOK
-          ? `hook PreToolUse (${HOOK_REL}, agent mode) + education layer ${INSTR_REL} — instructions là lớp chính`
-          : `education layer ${INSTR_REL} — KHÔNG chặn được prompt (giới hạn nền tảng)`,
+          ? `hook PreToolUse (${HOOK_REL}, agent mode) + education layer ${INSTR_REL} — instructions are the primary layer`
+          : `education layer ${INSTR_REL} — prompt side cannot be blocked (platform limitation)`,
       };
     } catch (e) {
       return { adapter: "copilot", ok: false, detail: String(e) };
@@ -90,18 +90,18 @@ export const copilotAdapter: AdapterBase = {
       const rest = removeMarkedSection(instrPath);
       let instrDetail: string;
       if (rest === null) {
-        instrDetail = "không có section ai-guard trong copilot-instructions.md";
+        instrDetail = "no ai-guard section in copilot-instructions.md";
       } else if (rest.trim() === "") {
         rmSync(instrPath);
-        instrDetail = `đã xóa ${INSTR_REL} (chỉ còn section ai-guard)`;
+        instrDetail = `deleted ${INSTR_REL} (only the ai-guard section remained)`;
       } else {
         writeFileSync(instrPath, rest.trimEnd() + "\n");
-        instrDetail = `đã bỏ section ai-guard khỏi ${INSTR_REL}, giữ content user`;
+        instrDetail = `removed ai-guard section from ${INSTR_REL}, kept user content`;
       }
       return {
         adapter: "copilot",
         ok: true,
-        detail: `${removedHook ? "hook đã gỡ" : "không có hook"}; ${instrDetail}`,
+        detail: `${removedHook ? "hook removed" : "no hook"}; ${instrDetail}`,
       };
     } catch (e) {
       return { adapter: "copilot", ok: false, detail: String(e) };
@@ -112,13 +112,13 @@ export const copilotAdapter: AdapterBase = {
     const hookPath = join(root, HOOK_REL);
     const hasInstr = existsSync(instrPath) && readFileSync(instrPath, "utf8").includes(SECTION_MARKER);
     const hookDetail = existsSync(hookPath)
-      ? (readFileSync(hookPath, "utf8").includes(MARKER) ? "hook PreToolUse đã cài" : "hook file không phải của ai-guard")
-      : "không có hook";
+      ? (readFileSync(hookPath, "utf8").includes(MARKER) ? "hook PreToolUse installed" : "hook file does not belong to ai-guard")
+      : "no hook";
     return {
       ok: hasInstr,
       detail: hasInstr
-        ? `education layer ${INSTR_REL} đã cài (${hookDetail}; không chặn được prompt-side — giới hạn nền tảng)`
-        : `thiếu education layer ${INSTR_REL} (${hookDetail})`,
+        ? `education layer ${INSTR_REL} installed (${hookDetail}; prompt side cannot be blocked — platform limitation)`
+        : `missing education layer ${INSTR_REL} (${hookDetail})`,
     };
   },
 };

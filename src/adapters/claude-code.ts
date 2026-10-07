@@ -38,7 +38,7 @@ export const claudeCodeAdapter: AdapterBase = {
         : null;
       writeJson(file, settings);
       if (instruction !== null) writeFileSync(join(root, "CLAUDE.md"), instruction);
-      return { adapter: "claude-code", ok: true, detail: "hooks UserPromptSubmit + PreToolUse đã đăng ký" };
+      return { adapter: "claude-code", ok: true, detail: "hooks UserPromptSubmit + PreToolUse registered" };
     } catch (e) {
       return { adapter: "claude-code", ok: false, detail: String(e) };
     }
@@ -46,7 +46,7 @@ export const claudeCodeAdapter: AdapterBase = {
   uninstall(root: string): InstallResult {
     try {
       const file = join(root, ".claude", "settings.json");
-      if (!existsSync(file)) return { adapter: "claude-code", ok: true, detail: "không có settings.json — không có gì để gỡ" };
+      if (!existsSync(file)) return { adapter: "claude-code", ok: true, detail: "no settings.json — nothing to remove" };
       const settings = readJson<ClaudeSettings>(file, {});
       if (settings.hooks) {
         for (const ev of Object.keys(settings.hooks)) {
@@ -57,7 +57,7 @@ export const claudeCodeAdapter: AdapterBase = {
         if (Object.keys(settings.hooks).length === 0) delete settings.hooks;
       }
       writeJson(file, settings);
-      return { adapter: "claude-code", ok: true, detail: "hooks ai-guard đã gỡ" };
+      return { adapter: "claude-code", ok: true, detail: "ai-guard hooks removed" };
     } catch (e) {
       return { adapter: "claude-code", ok: false, detail: String(e) };
     }
@@ -66,6 +66,6 @@ export const claudeCodeAdapter: AdapterBase = {
     const settings = readJson<ClaudeSettings>(join(root, ".claude", "settings.json"), {});
     const ok = entriesWithMarker(settings.hooks?.UserPromptSubmit, "check-prompt")
       && entriesWithMarker(settings.hooks?.PreToolUse, "check-file");
-    return { ok, detail: ok ? "hooks đã đăng ký" : "thiếu hook ai-guard trong .claude/settings.json" };
+    return { ok, detail: ok ? "hooks registered" : "missing ai-guard hook in .claude/settings.json" };
   },
 };

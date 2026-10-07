@@ -42,7 +42,7 @@ export const codexAdapter: AdapterBase = {
         : null;
       writeJson(file, cfg);
       if (instruction !== null) writeFileSync(join(root, "AGENTS.md"), instruction);
-      return { adapter: "codex", ok: true, detail: "hooks UserPromptSubmit + PreToolUse đã đăng ký" };
+      return { adapter: "codex", ok: true, detail: "hooks UserPromptSubmit + PreToolUse registered" };
     } catch (e) {
       return { adapter: "codex", ok: false, detail: String(e) };
     }
@@ -50,7 +50,7 @@ export const codexAdapter: AdapterBase = {
   uninstall(root: string): InstallResult {
     try {
       const file = join(root, ".codex", "hooks.json");
-      if (!existsSync(file)) return { adapter: "codex", ok: true, detail: "không có hooks.json — không có gì để gỡ" };
+      if (!existsSync(file)) return { adapter: "codex", ok: true, detail: "no hooks.json — nothing to remove" };
       const cfg = readJson<CodexHooks>(file, {});
       if (cfg.hooks) {
         for (const ev of Object.keys(cfg.hooks)) {
@@ -61,7 +61,7 @@ export const codexAdapter: AdapterBase = {
         if (Object.keys(cfg.hooks).length === 0) delete cfg.hooks;
       }
       writeJson(file, cfg);
-      return { adapter: "codex", ok: true, detail: "hooks ai-guard đã gỡ" };
+      return { adapter: "codex", ok: true, detail: "ai-guard hooks removed" };
     } catch (e) {
       return { adapter: "codex", ok: false, detail: String(e) };
     }
@@ -70,6 +70,6 @@ export const codexAdapter: AdapterBase = {
     const cfg = readJson<CodexHooks>(join(root, ".codex", "hooks.json"), {});
     const ok = entriesWithMarker(cfg.hooks?.UserPromptSubmit, "check-prompt")
       && entriesWithMarker(cfg.hooks?.PreToolUse, "check-file");
-    return { ok, detail: ok ? "hooks đã đăng ký" : "thiếu hook ai-guard trong .codex/hooks.json" };
+    return { ok, detail: ok ? "hooks registered" : "missing ai-guard hook in .codex/hooks.json" };
   },
 };

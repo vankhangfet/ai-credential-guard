@@ -42,7 +42,7 @@ RULES_ARTIFACT = [
      # non-raw string: raw-string r"...\"..." sẽ giữ backslash trong class, lệch
      # verbatim so với src — username class [^\s:@/"'], password class [^\s@/"']
      "pattern": "\\b(?:mysql|postgres|postgresql|mongodb(?:\\+srv)?|redis|rediss|mssql|amqps?|ibmdb)://[^\\s:@/\"']+:[^\\s@/\"']+@",
-     "description": "DB connection string có password"},
+     "description": "DB connection string with password"},
     {"id": "slack-token", "severity": "block",
      "pattern": r"\bxox[bapr]-[A-Za-z0-9-]{10,}\b",
      "description": "Slack token"},
@@ -53,9 +53,9 @@ RULES_ARTIFACT = [
      "pattern": r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{5,}\b",
      "description": "JWT token"},
     {"id": "generic-secret", "severity": "warn", "pattern": "",
-     "description": "Gán giá trị cho password/secret/api_key", "builtin": "generic-secret"},
+     "description": "Secret value assigned to password/secret/api_key", "builtin": "generic-secret"},
     {"id": "high-entropy", "severity": "warn", "pattern": "",
-     "description": "Token entropy cao khả năng là secret", "builtin": "high-entropy"},
+     "description": "High-entropy token likely a secret", "builtin": "high-entropy"},
 ]
 
 PATCH_STDIN = json.dumps({
@@ -80,7 +80,7 @@ def load_engine_module():
 
 
 class EngineCliTests(unittest.TestCase):
-    """Contract-level qua subprocess — exit codes, stderr tiếng Việt, audit, bypass."""
+    """Contract-level qua subprocess — exit codes, English stderr, audit, bypass."""
 
     @classmethod
     def setUpClass(cls):
@@ -174,7 +174,7 @@ class EngineCliTests(unittest.TestCase):
     def test_allow_prompt_bypass(self):
         r = self.run_engine(["allow", "prompt", "--5m", "--root", str(self.proj)])
         self.assertEqual(r.returncode, 0, msg=r.stderr)
-        self.assertIn("5 phút", r.stdout)
+        self.assertIn("5 minutes", r.stdout)
 
         r2 = self.check_prompt(f"key: {AWS_KEY}")
         self.assertEqual(r2.returncode, 0, msg=r2.stderr)
@@ -261,7 +261,7 @@ class EngineCliTests(unittest.TestCase):
             cwd=str(self.proj),
         )
         self.assertEqual(r.returncode, 2, msg=r.stdout + r.stderr)
-        self.assertIn("ĐÃ CHẶN", r.stderr)
+        self.assertIn("BLOCKED", r.stderr)
 
 
 class EngineUnitTests(unittest.TestCase):

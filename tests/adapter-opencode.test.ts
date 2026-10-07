@@ -42,7 +42,7 @@ describe("opencode adapter", () => {
     require("node:fs").writeFileSync(join(root, ".opencode", "plugins", "ai-guard.ts"), "export const X = async () => ({});\n");
     const d = opencodeAdapter.doctor(root);
     expect(d.ok).toBe(false);
-    expect(d.detail).toContain("không phải của ai-guard");
+    expect(d.detail).toContain("does not belong to ai-guard");
   });
   it("uninstall: shim file lạ (không marker) -> không xóa", () => {
     const root = mkproject({ opencode: true });

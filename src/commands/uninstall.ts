@@ -11,7 +11,7 @@ export async function uninstall(argv: string[]): Promise<number> {
   const purge = argv.includes("--purge");
   const root = findProjectRoot(start);
   if (!root) {
-    process.stderr.write("ai-guard: không tìm thấy .ai-guard — không có gì để gỡ.\n");
+    process.stderr.write("ai-guard: no .ai-guard found — nothing to remove.\n");
     return 1;
   }
   let allOk = true;
@@ -27,13 +27,13 @@ export async function uninstall(argv: string[]): Promise<number> {
   if (purge) {
     try {
       rmSync(join(root, ".ai-guard"), { recursive: true, force: true });
-      console.log("✓ Đã xóa .ai-guard/ (bao gồm audit log).");
+      console.log("✓ Deleted .ai-guard/ (including audit log).");
     } catch (e) {
       allOk = false;
-      console.log(`✗ không xóa được .ai-guard/: ${e}`);
+      console.log(`✗ failed to delete .ai-guard/: ${e}`);
     }
   } else {
-    console.log("Giữ lại .ai-guard/ (config + audit log). Dùng --purge để xóa hẳn.");
+    console.log("Kept .ai-guard/ (config + audit log). Use --purge to delete everything.");
   }
   return allOk ? 0 : 1;
 }

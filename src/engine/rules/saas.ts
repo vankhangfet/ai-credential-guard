@@ -10,10 +10,10 @@ export const saasRules: Rule[] = [
   { id: "mailchimp-key", severity: "block", description: "Mailchimp API key", pattern: "\\b[0-9a-f]{32}-us[0-9]{1,2}\\b" },
   { id: "sentry-dsn", severity: "block", description: "Sentry DSN (secret)", pattern: "https://[0-9a-f]{32}@[a-z0-9.]+/[0-9]+" },
   // ngữ cảnh datadog cách key hex-32 ≤40 ký tự
-  { id: "datadog-key", severity: "block", description: "Datadog API key (kèm ngữ cảnh datadog)", pattern: "(?:[Dd][Aa][Tt][Aa][Dd][Oo][Gg]|[Dd][Dd]_[Aa][Pp][Ii]_[Kk][Ee][Yy])[^\\n]{0,40}?[a-f0-9]{32}" },
+  { id: "datadog-key", severity: "block", description: "Datadog API key (with datadog context)", pattern: "(?:[Dd][Aa][Tt][Aa][Dd][Oo][Gg]|[Dd][Dd]_[Aa][Pp][Ii]_[Kk][Ee][Yy])[^\\n]{0,40}?[a-f0-9]{32}" },
   { id: "grafana-key", severity: "block", description: "Grafana service account token", pattern: "\\bglsa_[A-Za-z0-9]{32,}\\b" },
   // ngữ cảnh cloudflare cách token ≤40 ký tự (token class không chứa '-' để tránh FP ở URL blog)
-  { id: "cloudflare-key", severity: "block", description: "Cloudflare API token (kèm ngữ cảnh cloudflare)", pattern: "[Cc][Ll][Oo][Uu][Dd][Ff][Ll][Aa][Rr][Ee][^\\n]{0,40}?[A-Za-z0-9_]{40}" },
+  { id: "cloudflare-key", severity: "block", description: "Cloudflare API token (with cloudflare context)", pattern: "[Cc][Ll][Oo][Uu][Dd][Ff][Ll][Aa][Rr][Ee][^\\n]{0,40}?[A-Za-z0-9_]{40}" },
   { id: "vercel-token", severity: "block", description: "Vercel token", pattern: "\\bvercel_[A-Za-z0-9]{36}\\b" },
   { id: "supabase-key", severity: "block", description: "Supabase service role JWT / sb_secret key", pattern: "\\bsb_secret_[A-Za-z0-9]{40,}\\b|eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\\.eyJpc3MiOiJzdXBhYmFzZ" },
   { id: "shopify-token", severity: "block", description: "Shopify access token", pattern: "\\bshpat_[0-9a-fA-F]{32}\\b" },

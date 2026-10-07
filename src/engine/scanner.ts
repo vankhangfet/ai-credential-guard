@@ -32,7 +32,7 @@ export function scanText(text: string, rules: CompiledRule[], cfg: AiGuardConfig
       // ngữ cảnh key (password=/api_key:) đã là tín hiệu mạnh — chỉ chặn placeholder;
       // KHÔNG thêm entropy gate ở đây (bỏ sót secret lowercase ngẫu nhiên, review Task 3)
       if (!isPlaceholder(value)) {
-        findings.push({ ruleId: "generic-secret", severity: "warn", description: "Gán giá trị secret trong text", preview: maskSecret(value) });
+        findings.push({ ruleId: "generic-secret", severity: "warn", description: "Secret value assigned in text", preview: maskSecret(value) });
         if (findings.length >= MAX_FINDINGS) return findings;
       }
     }
@@ -44,7 +44,7 @@ export function scanText(text: string, rules: CompiledRule[], cfg: AiGuardConfig
       seen.add(token);
       if (isPlaceholder(token)) continue;
       if (isHighEntropyToken(token)) {
-        findings.push({ ruleId: "high-entropy", severity: "warn", description: "Token entropy cao", preview: maskSecret(token) });
+        findings.push({ ruleId: "high-entropy", severity: "warn", description: "High-entropy token", preview: maskSecret(token) });
         if (findings.length >= MAX_FINDINGS) return findings;
       }
     }

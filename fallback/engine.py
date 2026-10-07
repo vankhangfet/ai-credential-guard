@@ -3,7 +3,7 @@
 
 Dùng khi môi trường không có node (hook vẫn chặn được). Contract mirror:
 check-prompt / check-file / allow / self-test, exit codes 0/1/2, audit JSONL
-ngày UTC, bypass store có hash path, stderr tiếng Việt — giống src/cli.ts.
+ngày UTC, bypass store có hash path, English stderr — giống src/cli.ts.
 Builtin rules load từ rules.json cạnh file này (hoặc env AI_GUARD_BUILTIN_RULES);
 dist/rules.json là build artifact do src/scripts/export-rules.ts xuất
 (exactly 5 fields: id, severity, pattern, description, builtin?).
@@ -288,7 +288,7 @@ def scan(text: str, rules: list, generic: bool = True, entropy: bool = True) -> 
                 findings.append({
                     "ruleId": "generic-secret",
                     "severity": "warn",
-                    "description": "Gán giá trị secret trong text",
+                    "description": "Secret value assigned in text",
                     "preview": mask_secret(value),
                 })
                 if len(findings) >= MAX_FINDINGS:
@@ -305,7 +305,7 @@ def scan(text: str, rules: list, generic: bool = True, entropy: bool = True) -> 
                 findings.append({
                     "ruleId": "high-entropy",
                     "severity": "warn",
-                    "description": "Token entropy cao",
+                    "description": "High-entropy token",
                     "preview": mask_secret(token),
                 })
                 if len(findings) >= MAX_FINDINGS:
@@ -502,15 +502,15 @@ def cmd_check_prompt(args: list, stdin_text: str) -> int:
         "rule": blocks[0]["ruleId"], "preview": blocks[0]["preview"], "count": len(blocks),
     })
     lines = [
-        "ai-guard: ĐÃ CHẶN — phát hiện credential trong prompt (không gửi tới AI).",
+        "ai-guard: BLOCKED — credential detected in prompt (not sent to AI).",
     ]
     for f in blocks[:5]:
         lines.append("  • {}: {} [preview: {}]".format(f["ruleId"], f["description"], f["preview"]))
     if len(blocks) > 5:
-        lines.append("  • ... và {} findings khác".format(len(blocks) - 5))
-    lines.append("Nếu bạn CỐ Ý muốn gửi nội dung này, chạy lệnh sau rồi gửi lại prompt:")
+        lines.append("  • ... and {} more findings".format(len(blocks) - 5))
+    lines.append("If you INTENTIONALLY want to send this, run the following then resubmit:")
     lines.append("  python .ai-guard/bin/engine.py allow prompt --5m")
-    lines.append("(Lần gửi kế tiếp trong thời gian cho phép sẽ được ghi vào audit log.)")
+    lines.append("(The next submission within the window will be recorded in the audit log.)")
     sys.stderr.write("\n".join(lines) + "\n")
     return 2
 
@@ -591,9 +591,9 @@ def cmd_check_file(args: list, stdin_text: str) -> int:
             "ts": _now_iso(), "tool": tool, "event": "file", "action": "blocked", "path": rel,
         })
         sys.stderr.write("\n".join([
-            "ai-guard: ĐÃ CHẶN — file nhạy cảm (chưa cho AI đọc/ghi).",
+            "ai-guard: BLOCKED — sensitive file (AI not allowed to read/write).",
             "  • Path: {}".format(rel),
-            "Nếu bạn CỐ Ý muốn cho phép file này, chạy:",
+            "If you INTENTIONALLY want to allow this file, run:",
             "  python .ai-guard/bin/engine.py allow file {} --10m".format(rel),
         ]) + "\n")
         return 2
@@ -607,22 +607,22 @@ def cmd_allow(args: list) -> int:
     if project_root is None:
         # no-root hint: máy không-npm chạy installer fallback (chính installer tạo .ai-guard)
         sys.stderr.write(
-            "ai-guard: không tìm thấy .ai-guard — chạy install.sh/install.ps1 (fallback) "
-            "hoặc `npx ai-guard init` (nếu có npm).\n")
+            "ai-guard: no .ai-guard found — run install.sh/install.ps1 (fallback) "
+            "or `npx ai-guard init` (npm).\n")
         return 1
     scope = args[0] if args else None
     if scope not in ("prompt", "file"):
         sys.stderr.write(
-            "ai-guard: dùng `python engine.py allow prompt --5m` "
-            "hoặc `python engine.py allow file <path> --10m`\n")
+            "ai-guard: use `python engine.py allow prompt --5m` "
+            "or `python engine.py allow file <path> --10m`\n")
         return 1
     minutes_flag = next((a for a in args if re.match(r"^--\d+m$", a)), None)
     if minutes_flag is None:
-        sys.stderr.write("ai-guard: thiếu thời gian cho phép, vd --5m hoặc --10m\n")
+        sys.stderr.write("ai-guard: missing duration, e.g. --5m or --10m\n")
         return 1
     minutes = int(minutes_flag[2:-1])  # "--5m" -> 5 (regex đã đảm bảo dạng --\d+m)
     if not (1 <= minutes <= 1440):
-        sys.stderr.write("ai-guard: thời gian cho phép phải từ 1 đến 1440 phút (24h)\n")
+        sys.stderr.write("ai-guard: duration must be between 1 and 1440 minutes (24h)\n")
         return 1
     path = None
     if scope == "file":
@@ -630,7 +630,7 @@ def cmd_allow(args: list) -> int:
                      if i > 0 and not a.startswith("--")
                      and a != minutes_flag and a != root_val), None)
         if path is None:
-            sys.stderr.write("ai-guard: thiếu path, vd `python engine.py allow file .env --10m`\n")
+            sys.stderr.write("ai-guard: missing path, e.g. `python engine.py allow file .env --10m`\n")
             return 1
     grant_bypass(project_root, scope, path, minutes)
     evt = {
@@ -638,7 +638,7 @@ def cmd_allow(args: list) -> int:
         "scope": scope, "path": path, "duration_min": minutes,
     }
     append_audit(project_root, {k: v for k, v in evt.items() if v is not None})
-    sys.stdout.write("ai-guard: đã cho phép {}{} trong {} phút (đã ghi audit log).\n".format(
+    sys.stdout.write("ai-guard: allowed {}{} for {} minutes (audit logged).\n".format(
         scope, " " + path if path else "", minutes))
     return 0
 
@@ -689,8 +689,8 @@ def self_test():
 def cmd_self_test(args: list) -> int:
     if not isinstance(_read_json_safe(builtin_rules_path()), list):
         sys.stderr.write(
-            "ai-guard: không tìm thấy builtin rules artifact ({}) — "
-            "fallback/rules.json do installer copy từ dist/rules.json.\n".format(
+            "ai-guard: builtin rules artifact not found ({}) — "
+            "the installer copies dist/rules.json to fallback/rules.json.\n".format(
                 builtin_rules_path()))
     total, failures = self_test()
     for f in failures:
@@ -713,14 +713,14 @@ STDIN_COMMANDS = ("check-prompt", "check-file")
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="engine.py",
-        description="ai-guard fallback engine — python mirror của node CLI contract",
+        description="ai-guard fallback engine — python mirror of the node CLI contract",
     )
     sub = parser.add_subparsers(dest="command", metavar="<command>")
     for name, helptext in [
-        ("check-prompt", "quét stdin (prompt) tìm secret"),
-        ("check-file", "chặn path nhạy cảm (argv positional hoặc stdin JSON/patch header)"),
-        ("allow", "cho phép tạm thời (bypass) prompt hoặc file"),
-        ("self-test", "tự kiểm tra engine với fixture built-in"),
+        ("check-prompt", "scan stdin (prompt) for secrets"),
+        ("check-file", "block sensitive paths (argv positional or stdin JSON/patch header)"),
+        ("allow", "temporarily allow (bypass) a prompt or file"),
+        ("self-test", "run engine self-test with built-in fixtures"),
     ]:
         # subparser không khai báo argument: phần còn lại của argv được trả về
         # nguyên vẹn (parse_known_args) để cmd_* tự parse theo contract node
@@ -738,7 +738,8 @@ def _read_stdin() -> str:
 
 
 def _reconfigure_streams() -> None:
-    # stdin + stderr tiếng Việt — ép utf-8 để không vỡ trên console/pipe cp1252
+    # stdin + stderr — ép utf-8 để không vỡ trên console/pipe cp1252 (prompt
+    # input có thể chứa utf-8 bất kỳ)
     # (windows). KHÔNG reconfigure stdin thì đọc prompt utf-8 dưới cp1252 ném
     # UnicodeDecodeError (subclass ValueError) -> fail-open nuốt lỗi -> exit 0
     # mà KHÔNG quét (silent-skip) — reproducer: PYTHONIOENCODING=cp1252.

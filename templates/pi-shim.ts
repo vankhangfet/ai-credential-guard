@@ -57,7 +57,7 @@ function guard(args: string[], input?: string): void {
       });
   if (r.error) {
     // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được
-    console.error("ai-guard: engine không chạy được (" + r.error.message + ") — BỎ QUA kiểm tra (fail-open)");
+    console.error("ai-guard: engine failed to run (" + r.error.message + ") — SKIPPING check (fail-open)");
     return;
   }
   if (r.status === 2) throw new Error((r.stderr || "ai-guard: blocked").trim());

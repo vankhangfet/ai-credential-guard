@@ -46,13 +46,13 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   }
   appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: "blocked", rule: blocks[0].ruleId, preview: blocks[0].preview, count: blocks.length });
   const lines = [
-    "ai-guard: ĐÃ CHẶN — phát hiện credential trong prompt (không gửi tới AI).",
+    "ai-guard: BLOCKED — credential detected in prompt (not sent to AI).",
     ...blocks.slice(0, 5).map((f) => `  • ${f.ruleId}: ${f.description} [preview: ${f.preview}]`),
   ];
-  if (blocks.length > 5) lines.push(`  • ... và ${blocks.length - 5} findings khác`);
-  lines.push("Nếu bạn CỐ Ý muốn gửi nội dung này, chạy lệnh sau rồi gửi lại prompt:");
+  if (blocks.length > 5) lines.push(`  • ... and ${blocks.length - 5} more findings`);
+  lines.push("If you INTENTIONALLY want to send this, run the following then resubmit:");
   lines.push("  npx ai-guard allow prompt --5m");
-  lines.push("(Lần gửi kế tiếp trong thời gian cho phép sẽ được ghi vào audit log.)");
+  lines.push("(The next submission within the window will be recorded in the audit log.)");
   process.stderr.write(lines.join("\n") + "\n");
   return 2;
 }

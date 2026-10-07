@@ -50,6 +50,6 @@ describe("pi adapter", () => {
     writeFileSync(join(root, SHIM), "export default function (pi: any) { pi.on('tool_call', async () => {}); }\n");
     const d = piAdapter.doctor(root);
     expect(d.ok).toBe(false);
-    expect(d.detail).toContain("không phải của ai-guard");
+    expect(d.detail).toContain("does not belong to ai-guard");
   });
 });

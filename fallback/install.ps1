@@ -25,9 +25,9 @@ foreach ($c in $Candidates) {
 }
 if (-not $PyCmd) {
   if ($Candidates.Count -gt 0) {
-    Write-Error "ai-guard: không tìm thấy Python thật (WindowsApps stub) — cài từ python.org rồi chạy lại."
+    Write-Error "ai-guard: real Python not found (WindowsApps stub) — install from python.org and re-run."
   } else {
-    Write-Error "ai-guard: cần python (py/python) — không tìm thấy. Cài Python 3 rồi chạy lại."
+    Write-Error "ai-guard: python (py/python) required but not found. Install Python 3 and re-run."
   }
   exit 1
 }
@@ -38,7 +38,7 @@ Copy-Item -Path "$Src\engine.py" -Destination "$Root\.ai-guard\bin\engine.py" -F
 if (Test-Path "$Src\rules.json") {
   Copy-Item -Path "$Src\rules.json" -Destination "$Root\.ai-guard\bin\rules.json" -Force
 } else {
-  Write-Warning "ai-guard: CẢNH BÁO — thiếu $Src\rules.json (build artifact). Engine chỉ còn heuristic warn (KHÔNG chặn) cho tới khi copy dist/rules.json vào fallback/rules.json rồi chạy lại."
+  Write-Warning "ai-guard: WARNING — missing $Src\rules.json (build artifact). Engine will run in warn-only heuristic mode (NO blocking) until dist/rules.json is copied to fallback/rules.json and re-run."
 }
 
 # 2) gitignore idempotent
@@ -78,13 +78,13 @@ os.replace(tmp, path)
 '@
 # fail-fast guard: double-quote trong $regCode sẽ bị PS 5.1 chặt đứt khi qua native arg
 # (python -c nhận code truncate -> exit 0 mà không làm gì) — chặn sớm thay vì im lặng.
-if ($regCode -match '"') { throw "ai-guard: regCode chứa double-quote — PS 5.1 hỏng native arg passing" }
+if ($regCode -match '"') { throw "ai-guard: regCode contains a double-quote — PS 5.1 native arg passing broken" }
 
 function Register-AiGuardHooks([string]$File, [string]$DefaultContent, [string]$Tool, [string]$Matcher) {
   if (-not (Test-Path $File)) { Set-Content -Path $File -Value $DefaultContent -Encoding Ascii }
   if (-not (Test-Path "$($File).aiguard.bak")) { Copy-Item -Path $File -Destination "$($File).aiguard.bak" }
   & $PyCmd -c $regCode $File $PyCmd "$Root\.ai-guard\bin\engine.py" $Tool $Matcher
-  if ($LASTEXITCODE -ne 0) { throw "ai-guard: đăng ký hook thất bại cho $File" }
+  if ($LASTEXITCODE -ne 0) { throw "ai-guard: hook registration failed for $File" }
 }
 
 $Registered = $false
@@ -102,10 +102,10 @@ if (Test-Path "$Root\.codex") {
 
 # 4) guard: chưa thấy tool nào -> warn nhưng vẫn exit 0 (engine đã copy sẵn)
 if (-not $Registered) {
-  Write-Warning "ai-guard: không tìm thấy .claude/.codex — chắc chắn chạy từ thư mục dự án? (engine đã copy vào .ai-guard\bin nhưng chưa đăng ký hook nào)"
+  Write-Warning "ai-guard: WARNING — no .claude/.codex found — make sure you are running from the project root? (engine copied to .ai-guard\bin but no hooks registered)"
 }
 
 Write-Host ""
-Write-Host "ai-guard fallback installed tại $Root\.ai-guard\bin"
-Write-Host "Chế độ fallback: claude-code + codex; đầy đủ 7 tool: dùng npm (npx ai-guard init)."
-Write-Host "Kiểm tra: echo 'test sạch' | $PyCmd `"$Root\.ai-guard\bin\engine.py`" check-prompt --root `"$Root`""
+Write-Host "ai-guard fallback installed at $Root\.ai-guard\bin"
+Write-Host "Fallback mode: claude-code + codex only; for all 7 tools use npm (npx ai-guard init)."
+Write-Host "Verify: echo 'clean test' | $PyCmd `"$Root\.ai-guard\bin\engine.py`" check-prompt --root `"$Root`""
