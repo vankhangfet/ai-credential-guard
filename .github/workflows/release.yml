@@ -1,0 +1,71 @@
+name: Release
+
+# Tự động khi một GitHub Release được publish (từ tag vX.Y.Z)
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write # để upload asset (fallback zip) vào release
+
+jobs:
+  publish-npm:
+    name: Test + publish to npm + attach fallback zip
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org/
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests (node + python fallback)
+        run: |
+          npm test
+          python3 -m unittest discover -s fallback/tests -t .
+
+      - name: Build
+        run: npm run build
+
+      - name: Bin shebang guard
+        run: head -1 dist/cli.js | grep -q '#!'
+
+      - name: Publish to npm
+        if: ${{ env.NPM_TOKEN != '' }}
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish skipped — missing NPM_TOKEN secret
+        if: ${{ env.NPM_TOKEN == '' }}
+        run: |
+          echo "::warning::NPM_TOKEN secret chưa cấu hình — bỏ qua npm publish. Thêm repo Settings → Secrets and variables → Actions → NPM_TOKEN (granular token read/write packages) để bật."
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Build fallback zip (engine + installers + rules artifact)
+        run: |
+          mkdir -p pkg/fallback
+          cp fallback/engine.py fallback/install.sh fallback/install.ps1 pkg/fallback/
+          cp dist/rules.json pkg/fallback/rules.json
+          cd pkg && zip -r ../ai-credential-guard-fallback.zip fallback
+
+      - name: Attach fallback zip to release
+        run: gh release upload "$GITHUB_REF_NAME" ai-credential-guard-fallback.zip --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Verify on registry
+        if: ${{ env.NPM_TOKEN != '' }}
+        run: npm view ai-credential-guard version dist-tags --json
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
