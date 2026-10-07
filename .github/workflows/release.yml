@@ -13,6 +13,10 @@ jobs:
     name: Test + publish to npm + attach fallback zip
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      # JOB-level env — steps.if ĐỌC ĐƯỢC (env cấp step thì không;
+      # secrets context không hợp lệ trong steps.if)
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,17 +44,14 @@ jobs:
         run: head -1 dist/cli.js | grep -q '#!'
 
       - name: Publish to npm
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: env.NPM_TOKEN != ''
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Publish skipped — missing NPM_TOKEN secret
-        if: ${{ secrets.NPM_TOKEN == '' }}
-        run: |
-          echo "::warning::NPM_TOKEN secret chưa cấu hình — bỏ qua npm publish. Thêm repo Settings → Secrets and variables → Actions → NPM_TOKEN (granular token read/write packages) để bật."
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish skipped - missing NPM_TOKEN secret
+        if: env.NPM_TOKEN == ''
+        run: echo "::warning::NPM_TOKEN secret is not configured - skipping npm publish. Add repo Settings > Secrets and variables > Actions > NPM_TOKEN (granular token with packages read/write) to enable."
 
       - name: Build fallback zip (engine + installers + rules artifact)
         run: |
@@ -65,5 +66,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Verify on registry
-        if: ${{ secrets.NPM_TOKEN != '' }}
+        if: env.NPM_TOKEN != ''
         run: npm view ai-credential-guard version dist-tags --json
