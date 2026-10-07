@@ -1,3 +1,4 @@
+# lưu ý: files-array trong package.json thắng npmignore — templates/*.md vẫn ship (cần cho runtime)
 tests/
 fallback/
 .github/

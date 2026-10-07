@@ -2,7 +2,9 @@
 
 Ngăn credential (API key, password, private key, connection string...) rò rỉ lên AI provider khi làm việc với AI coding tools. Hook vào **prompt** và **file-read** của 7 tool: Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, GitHub Copilot (VS Code). Chặn trước khi gửi; bypass có xác nhận kèm audit log.
 
-## Cài đặt (1 lệnh, cần Node ≥20)
+## Cài đặt (2 lệnh chính, cần Node ≥20)
+
+> ⚠️ **Tên npm `ai-guard` hiện đã bị một bên thứ ba chiếm placeholder trên registry.** Trước khi publish/dùng production, package cần đổi tên (vd scope `@org/ai-guard`). Các lệnh dưới đây hoạt động đúng khi cài từ git repo hoặc local. — sẽ cập nhật khi tên chính thức được chọn.
 
 ```bash
 npm i -D ai-guard      # hook chạy local, không cần mạng (khuyến nghị)
@@ -10,7 +12,7 @@ npx ai-guard init      # tự phát hiện tool trong dự án và đăng ký ho
 npx ai-guard doctor    # kiểm tra hooks + engine
 ```
 
-Sau đó **commit các file config hook** (`.claude/settings.json`, `.codex/hooks.json`, `.opencode/`, `.pi/`, `.clinerules/hooks/`, `.kiro/`, `.github/hooks/`) — thành viên mới clone repo đã có sẵn bảo vệ, chỉ cần `npm i`.
+Sau đó **commit các file config hook + instructions** (`.claude/settings.json`, `.codex/hooks.json`, `.opencode/`, `.pi/`, `.clinerules/hooks/`, `.kiro/`, `.github/hooks/`, `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) — thành viên mới clone repo đã có sẵn bảo vệ, chỉ cần `npm i`. (init ghi instructions mặc định; `.github/copilot-instructions.md` là mitigation prompt-side **duy nhất** của Copilot.)
 
 Không có npm? Xem [Fallback (Python)](#fallback-python-không-cần-npm).
 
@@ -37,19 +39,26 @@ Bypass có chủ đích:  npx ai-guard allow prompt --5m      (hoặc: allow fil
 | OpenCode | ✅ | ✅ | plugin shim `.opencode/plugins/ai-guard.ts` |
 | Pi | ⚠️ best-effort | ✅ | tool_call chặn thật (`{block}`); prompt-side best-effort |
 | Cline | ✅ | ✅ | script hooks `.clinerules/hooks/` (macOS/Linux; bật Features > Hooks) |
-| Kiro | ⚠️ | ⚠️ | best-effort (payload thiếu tool_input — Kiro#7500) + steering |
+| Kiro | ⚠️ | ⚠️ | best-effort (payload thiếu tool_input — [Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500)) + steering |
 | Copilot (VS Code) | ❌ | ✅ | `.github/hooks/*.json` (chat.useHooks); prompt không chặn được (giới hạn nền tảng) |
 
 ## Fallback (Python, không cần npm)
 
-Cho máy không có Node — chế độ này chỉ đăng ký hook cho **claude-code + codex** (đầy đủ 7 tool cần npm):
+Cho máy không có Node — chế độ này chỉ đăng ký hook cho **claude-code + codex** (đầy đủ 7 tool cần npm). Path chính cho máy không Node: **tải released zip** (đã kèm sẵn `rules.json` build sẵn — không cần bước build nào):
 
 ```bash
-git clone <repo> && cd ai-guard
-npm run build && cp dist/rules.json fallback/rules.json   # cần 1 lần để build rule artifact
+unzip ai-guard-fallback.zip && cd ai-guard-fallback          # hoặc giải nén bằng Explorer
 cd <thư-mục-dự-án-của-bạn>
-bash /path/to/ai-guard/fallback/install.sh        # macOS/Linux
+bash /path/to/ai-guard-fallback/install.sh        # macOS/Linux
 # Windows: powershell -File install.ps1
+```
+
+Build từ source (khi chưa có released zip — chạy trên máy **CÓ Node**, 1 lần):
+
+```bash
+git clone <repo> && cd ai-guard                          # <repo> = thay URL repo thật
+npm run build && cp dist/rules.json fallback/rules.json   # cần 1 lần để build rule artifact
+# sau đó copy thư mục fallback/ (hoặc cả repo) sang máy không Node và chạy install như trên
 ```
 
 - Engine Python tại `.ai-guard/bin/engine.py`; block-flow hint trỏ đúng path đó
@@ -76,4 +85,4 @@ CI: 3 OS × Node 20/22 + Python + installer smoke (bash + PowerShell). Phát hà
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE) (đổi thành URL tuyệt đối khi có repo URL)
