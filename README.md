@@ -4,7 +4,7 @@ Ngăn credential (API key, password, private key, connection string...) rò rỉ
 
 ## Cài đặt (2 lệnh chính, cần Node ≥20)
 
-> ⚠️ **Tên npm `ai-guard` hiện đã bị một bên thứ ba chiếm placeholder trên registry.** Trước khi publish/dùng production, package cần đổi tên (vd scope `@org/ai-guard`). Các lệnh dưới đây hoạt động đúng khi cài từ git repo hoặc local. — sẽ cập nhật khi tên chính thức được chọn.
+> ⚠️ **Tên npm `ai-guard` hiện đã bị một bên thứ ba chiếm placeholder trên registry.** Trước khi publish/dùng production, package cần đổi tên (vd scope `@org/ai-guard`). Khi đổi tên package, GIỮ nguyên `bin` tên `ai-guard` (mọi hook command đã cài hardcode tên bin này). Các lệnh dưới đây hoạt động đúng khi cài từ git repo hoặc local. — sẽ cập nhật khi tên chính thức được chọn.
 
 ```bash
 npm i -D ai-guard      # hook chạy local, không cần mạng (khuyến nghị)

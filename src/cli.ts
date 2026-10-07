@@ -1,3 +1,8 @@
+#!/usr/bin/env node
+// Shebang BẮT BUỘC: npm chỉ sinh shim (.cmd/.ps1/sh) gọi `node <bin>` khi file bin có shebang.
+// Thiếu nó, Windows shim chạy cli.js trực tiếp (im lặng exit 0 — hook không bao giờ chạy),
+// còn POSIX shim exec file thô → sh parse JS → exit 2 (chặn mọi prompt).
+
 export async function runCli(argv: string[], input: string): Promise<number> {
   const command = argv[0];
   switch (command) {
