@@ -648,8 +648,8 @@ JWT_TOKEN_SELF = (
     "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 )
 
-# mirror đủ 8 fixtures của src/selftest-fixtures.ts (engine dùng artifact
-# builtin — installer copy đủ dist/rules.json thì 8/8 pass)
+# mirror đủ 9 fixtures của src/selftest-fixtures.ts (engine dùng artifact
+# builtin — installer copy đủ dist/rules.json thì 9/9 pass)
 SELF_TEST_FIXTURES = [
     {"name": "aws-key", "input": "AKIAIOSFODNN7EXAMPLE",
      "expectRule": "aws-access-key", "expectBlocked": True},
@@ -665,6 +665,8 @@ SELF_TEST_FIXTURES = [
      "expectRule": "slack-token", "expectBlocked": True},
     {"name": "jwt-warn", "input": JWT_TOKEN_SELF,
      "expectRule": "jwt", "expectBlocked": False},
+    {"name": "login-pair", "input": "ssh to server user name: root , password: 12345",
+     "expectRule": "login-credential-pair", "expectBlocked": True},
     {"name": "clean-text", "input": "viết cho tôi hàm quicksort bằng typescript",
      "expectBlocked": False},
 ]

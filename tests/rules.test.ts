@@ -37,6 +37,11 @@ const cases: Array<[string, string, boolean]> = [
   ["azure-storage", "AccountKey=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/abcdefghijklmnopqr==", true],
   ["telegram-bot", "110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw", true],
   ["discord-bot", "MTE1NjY5ODY4NTU0Njk4NjYw.GaXyZz.abcdefghijklmnopqrstuvwxyzabcdefghij", true],
+  // login-credential-pair: cặp user(name)/login + password cùng xuất hiện (cả 2 thứ tự)
+  ["login-credential-pair", "please ssh to ubuntu server with user name: root , password: 12345 , ip: 192.168.10.1", true],
+  ["login-credential-pair", "connect with password: hunter5 login: admin please", true],
+  ["login-credential-pair", "username=admin password=P@ss", true],
+  ["login-credential-pair", "password: 12345", false], // đơn lẻ không phải cặp — generic-secret warn lo
 ];
 
 describe("builtInRules", () => {

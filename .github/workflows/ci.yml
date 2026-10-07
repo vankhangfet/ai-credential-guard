@@ -24,8 +24,8 @@ jobs:
       - run: npm test
       - run: npm run build
       - name: dist/rules.json artifact tồn tại và đủ rules
-        # floor 49 — bump khi chỉnh catalog
-        run: node -e "const r=require('./dist/rules.json'); if(!Array.isArray(r)||r.length<49) process.exit(1); console.log('rules:',r.length)"
+        # floor 50 — bump khi chỉnh catalog
+        run: node -e "const r=require('./dist/rules.json'); if(!Array.isArray(r)||r.length<50) process.exit(1); console.log('rules:',r.length)"
         shell: bash
       - name: bin shebang guard
         run: head -1 dist/cli.js | grep -q '#!'

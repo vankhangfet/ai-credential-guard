@@ -32,7 +32,7 @@ Deliberate bypass:   npx ai-guard allow prompt --5m        (or: allow file .env 
 - **Extensible rules** — `.ai-guard/rules.json` with `add` (new rule; a duplicate id *replaces* the built-in), `override` (change severity), `remove`. Add your internal token format without touching code. Note: the `example-internal` demo rule (`CORP-*`) ships enabled — edit or remove it to taste.
 - **Sensitive paths** — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets/**`, and more; extend via `.ai-guard/config.json`.
 - **Fail-open** — if the engine cannot run, your workflow continues (a loud warning is printed to stderr). A guard should not break your day.
-- **Detection engine** — 49 built-in rules across 10 families (AWS/Google/Azure/Stripe, OpenAI/Anthropic/OpenRouter, GitHub/GitLab/Slack/npm, DB connection strings, config patterns, private keys, JWT) plus generic-assignment and Shannon-entropy heuristics (warn severity).
+- **Detection engine** — 50 built-in rules across 10 families (AWS/Google/Azure/Stripe, OpenAI/Anthropic/OpenRouter, GitHub/GitLab/Slack/npm, DB connection strings, config patterns, private keys, JWT) plus generic-assignment and Shannon-entropy heuristics (warn severity).
 
 ## Tool support matrix
 

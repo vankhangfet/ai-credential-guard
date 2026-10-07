@@ -15,5 +15,6 @@ export const FIXTURES: Fixture[] = [
   { name: "pem", input: "-----BEGIN PRIVATE KEY-----", expectRule: "private-key", expectBlocked: true },
   { name: "slack", input: "xoxb-123456789012-1234567890123-abcdefghijklmnopqrstuv", expectRule: "slack-token", expectBlocked: true },
   { name: "jwt-warn", input: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U", expectRule: "jwt", expectBlocked: false },
+  { name: "login-pair", input: "ssh to server user name: root , password: 12345", expectRule: "login-credential-pair", expectBlocked: true },
   { name: "clean-text", input: "viết cho tôi hàm quicksort bằng typescript", expectBlocked: false },
 ];

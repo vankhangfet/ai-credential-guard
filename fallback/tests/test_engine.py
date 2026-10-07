@@ -28,7 +28,7 @@ JWT_TOKEN = (
 CLEAN_PROMPT = "viết cho tôi hàm quicksort bằng typescript"
 
 # artifact test tự tạo — patterns copy nguyên vẹn từ dist/rules.json; đủ rule
-# cho 8 fixture self-test + 2 builtin detector (pattern rỗng)
+# cho 9 fixture self-test + 2 builtin detector (pattern rỗng)
 RULES_ARTIFACT = [
     {"id": "aws-access-key", "severity": "block",
      "pattern": r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "description": "AWS Access Key ID"},
@@ -56,6 +56,10 @@ RULES_ARTIFACT = [
      "description": "Secret value assigned to password/secret/api_key", "builtin": "generic-secret"},
     {"id": "high-entropy", "severity": "warn", "pattern": "",
      "description": "High-entropy token likely a secret", "builtin": "high-entropy"},
+    # triple-quoted raw: pattern chứa cả ' lẫn " — giữ verbatim như dist/rules.json
+    {"id": "login-credential-pair", "severity": "block",
+     "pattern": r'''(?<![a-z0-9])(?:[Uu]ser(?:[ _-]?[Nn]ame)?|[Ll]ogin)\s*[:=@]\s*[^\s,;'"&]{1,64}[^.]{0,120}?(?<![a-z0-9])(?:[Pp]asswo?rd|[Pp]asswd)\s*[:=@]\s*[^\s,;'"&]{1,64}|(?<![a-z0-9])(?:[Pp]asswo?rd|[Pp]asswd)\s*[:=@]\s*[^\s,;'"&]{1,64}[^.]{0,120}?(?<![a-z0-9])(?:[Uu]ser(?:[ _-]?[Nn]ame)?|[Ll]ogin)\s*[:=@]\s*[^\s,;'"&]{1,64}''',
+     "description": "Username + password credential pair (login context)"},
 ]
 
 PATCH_STDIN = json.dumps({
@@ -232,13 +236,13 @@ class EngineCliTests(unittest.TestCase):
         # .env KHÔNG phải file cuối trong patch — vẫn phải bị bắt (collect TẤT CẢ headers)
         self.assertEqual(blocked[0].get("path"), ".env")
 
-    # -- 8. self-test (đủ 8 fixtures như src/selftest-fixtures.ts) -------------
+    # -- 8. self-test (đủ 9 fixtures như src/selftest-fixtures.ts) -------------
 
     def test_self_test_exits_0(self):
         r = self.run_engine(["self-test"])
         self.assertEqual(r.returncode, 0, msg=r.stdout + r.stderr)
         self.assertIn("self-test:", r.stdout)
-        self.assertIn("8/8 pass", r.stdout)
+        self.assertIn("9/9 pass", r.stdout)
 
     # -- 9. regression: stdin cp1252 không được silent-skip ---------------------
 
