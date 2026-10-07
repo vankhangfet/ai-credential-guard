@@ -1,5 +1,5 @@
 {
-  "name": "ai-guard",
+  "name": "ai-credential-guard",
   "version": "0.1.0",
   "description": "Prevent credentials from leaking to AI coding tools (prompt + file hooks)",
   "type": "commonjs",

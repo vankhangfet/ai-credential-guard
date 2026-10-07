@@ -7,7 +7,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
-// Fast-path: cài local qua `npm i -D ai-guard` — chạy process.execPath (binary node/bun đang
+// Fast-path: cài local qua `npm i -D ai-credential-guard` — chạy process.execPath (binary node/bun đang
 // chạy shim) với resolved cli.js: nhanh hơn npx ~20x (verifier đo npx --no-install ~6s/call trên
 // Windows, node dist/cli.js ~300ms) và hoạt động trên MỌI platform (kể cả win32 — không cần
 // .cmd, không cần shell). Fallback npx chỉ khi project chưa có local install: win32 spawn không

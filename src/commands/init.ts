@@ -57,6 +57,6 @@ export async function init(argv: string[], _input: string): Promise<number> {
   console.log("  Cấu hình rule: .ai-guard/rules.json — audit log: .ai-guard/logs/");
   console.log("  Lưu ý: rules.json có rule demo 'example-internal' (CORP-*) đang bật — sửa/xoá theo nhu cầu.");
   console.log("  Kiểm tra: npx ai-guard doctor");
-  console.log("  Lưu ý: thêm ai-guard vào devDependencies (npm i -D ai-guard) để hook chạy mà không cần mạng.");
+  console.log("  Lưu ý: thêm ai-credential-guard vào devDependencies (npm i -D ai-credential-guard) để hook chạy mà không cần mạng.");
   return results.some((r) => !r.ok) ? 1 : 0;
 }

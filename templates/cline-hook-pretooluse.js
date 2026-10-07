@@ -10,7 +10,7 @@ const { spawnSync } = require("node:child_process");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-// Fast-path: cài local qua `npm i -D ai-guard` — chạy process.execPath (binary node đang chạy
+// Fast-path: cài local qua `npm i -D ai-credential-guard` — chạy process.execPath (binary node đang chạy
 // hook) với resolved cli.js: nhanh hơn npx ~20x và hoạt động trên MỌI platform (kể cả win32 —
 // không cần .cmd, không cần shell). Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ
 // __dirname/../.. (cwd-independent) + cwd. Fallback npx chỉ khi chưa có local install: win32

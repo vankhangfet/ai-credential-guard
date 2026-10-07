@@ -4,10 +4,10 @@ Ngăn credential (API key, password, private key, connection string...) rò rỉ
 
 ## Cài đặt (2 lệnh chính, cần Node ≥20)
 
-> ⚠️ **Tên npm `ai-guard` hiện đã bị một bên thứ ba chiếm placeholder trên registry.** Trước khi publish/dùng production, package cần đổi tên (vd scope `@org/ai-guard`). Khi đổi tên package, GIỮ nguyên `bin` tên `ai-guard` (mọi hook command đã cài hardcode tên bin này). Các lệnh dưới đây hoạt động đúng khi cài từ git repo hoặc local. — sẽ cập nhật khi tên chính thức được chọn.
+> Package tên `ai-credential-guard` trên npm; binary vẫn là `ai-guard` (các lệnh `npx ai-guard ...` không đổi).
 
 ```bash
-npm i -D ai-guard      # hook chạy local, không cần mạng (khuyến nghị)
+npm i -D ai-credential-guard      # hook chạy local, không cần mạng (khuyến nghị)
 npx ai-guard init      # tự phát hiện tool trong dự án và đăng ký hook
 npx ai-guard doctor    # kiểm tra hooks + engine
 ```
@@ -67,7 +67,7 @@ npm run build && cp dist/rules.json fallback/rules.json   # cần 1 lần để 
 
 ## Hiệu năng & lưu ý
 
-- Hook là process ngắn: local install (`npm i -D`) ≈ 0.3-0.5s/lần gọi; **không có local install, npx fallback có thể ~6s trên Windows** — luôn khuyến nghị `npm i -D ai-guard`
+- Hook là process ngắn: local install (`npm i -D`) ≈ 0.3-0.5s/lần gọi; **không có local install, npx fallback có thể ~6s trên Windows** — luôn khuyến nghị `npm i -D ai-credential-guard`
 - `uninstall --purge` **xóa vĩnh viễn audit log** — không hỏi lại
 
 ## Lệnh
