@@ -7,7 +7,7 @@ export async function runCli(argv: string[], input: string): Promise<number> {
   const command = argv[0];
   switch (command) {
     case "version":
-      console.log("ai-guard 0.1.0");
+      console.log("ai-guard 1.0.0");
       return 0;
     case "check-prompt":
       return (await import("./commands/check-prompt")).checkPrompt(argv.slice(1), input);

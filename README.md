@@ -1,88 +1,103 @@
-# ai-guard
+# ai-credential-guard
 
-Ngăn credential (API key, password, private key, connection string...) rò rỉ lên AI provider khi làm việc với AI coding tools. Hook vào **prompt** và **file-read** của 7 tool: Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, GitHub Copilot (VS Code). Chặn trước khi gửi; bypass có xác nhận kèm audit log.
+> Published as `ai-credential-guard` on npm — the binary is `ai-guard`, so all commands stay `npx ai-guard ...`.
 
-## Cài đặt (2 lệnh chính, cần Node ≥20)
+Stop credentials from leaking to AI providers while you work with AI coding tools. ai-credential-guard hooks into the **prompt** and **file-read** path of 7 tools — **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, GitHub Copilot (VS Code)** — and blocks API keys, passwords, private keys, and connection strings *before* they reach the model. Deliberate overrides are allowed through a time-window bypass that is always recorded in an audit log.
 
-> Package tên `ai-credential-guard` trên npm; binary vẫn là `ai-guard` (các lệnh `npx ai-guard ...` không đổi).
+## Install (2 main commands, requires Node ≥ 20)
 
 ```bash
-npm i -D ai-credential-guard      # hook chạy local, không cần mạng (khuyến nghị)
-npx ai-guard init      # tự phát hiện tool trong dự án và đăng ký hook
-npx ai-guard doctor    # kiểm tra hooks + engine
+npm i -D ai-credential-guard   # local install — hooks run offline, ~0.3–0.5s per call (recommended)
+npx ai-guard init              # auto-detects the AI tools in your project and registers hooks
+npx ai-guard doctor            # verify hooks + engine
 ```
 
-Sau đó **commit các file config hook + instructions** (`.claude/settings.json`, `.codex/hooks.json`, `.opencode/`, `.pi/`, `.clinerules/hooks/`, `.kiro/`, `.github/hooks/`, `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`) — thành viên mới clone repo đã có sẵn bảo vệ, chỉ cần `npm i`. (init ghi instructions mặc định; `.github/copilot-instructions.md` là mitigation prompt-side **duy nhất** của Copilot.)
+Then **commit the generated hook config files** (`.claude/settings.json`, `.codex/hooks.json`, `.opencode/`, `.pi/`, `.clinerules/hooks/`, `.kiro/`, `.github/hooks/`, `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`). Teammates who clone the repo are already protected — they just run `npm i`.
 
-Không có npm? Xem [Fallback (Python)](#fallback-python-không-cần-npm).
+No Node on the machine? See [Fallback (Python)](#fallback-python-no-npm-required).
 
-## Cách hoạt động
+## How it works
 
 ```
-Prompt/file → hook tool → ai-guard check-* → sạch → cho qua
-                                        → phát hiện (severity block) → CHẶN + hướng dẫn bypass
-Bypass có chủ đích:  npx ai-guard allow prompt --5m      (hoặc: allow file .env --10m)
-                     → cho qua trong N phút (1..1440) + ghi audit log
+prompt / file read ──▶ tool hook ──▶ ai-guard check-* ──▶ clean ──▶ pass through
+                                              │
+                                              └─ credential detected (severity: block)
+                                                   ──▶ BLOCKED + bypass instructions
+
+Deliberate bypass:   npx ai-guard allow prompt --5m        (or: allow file .env --10m)
+                     ──▶ allowed for N minutes (1–1440) + audit entry
 ```
 
-- **Audit log**: `.ai-guard/logs/YYYY-MM-DD.jsonl` — secret luôn bị che (`sk-ant***k3Jg`); log không bao giờ chứa secret nguyên bản
-- **Rule mở rộng**: `.ai-guard/rules.json` — `add` (rule mới, trùng id thì THAY THẾ), `override` (đổi severity), `remove` — thêm format nội bộ không cần code. Lưu ý: rule demo `example-internal` (CORP-*) đang bật — sửa/xoá theo nhu cầu
-- **Sensitive paths**: `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets/**`... — cấu hình thêm được trong `.ai-guard/config.json`
-- **Fail-open**: engine lỗi không chặn workflow của bạn (in cảnh báo stderr)
+- **Audit log** — `.ai-guard/logs/YYYY-MM-DD.jsonl`. Secrets are always masked (`sk-ant***k3Jg`); raw secrets never reach the log or stderr.
+- **Extensible rules** — `.ai-guard/rules.json` with `add` (new rule; a duplicate id *replaces* the built-in), `override` (change severity), `remove`. Add your internal token format without touching code. Note: the `example-internal` demo rule (`CORP-*`) ships enabled — edit or remove it to taste.
+- **Sensitive paths** — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets/**`, and more; extend via `.ai-guard/config.json`.
+- **Fail-open** — if the engine cannot run, your workflow continues (a loud warning is printed to stderr). A guard should not break your day.
+- **Detection engine** — 49 built-in rules across 10 families (AWS/Google/Azure/Stripe, OpenAI/Anthropic/OpenRouter, GitHub/GitLab/Slack/npm, DB connection strings, config patterns, private keys, JWT) plus generic-assignment and Shannon-entropy heuristics (warn severity).
 
-## Bảng hỗ trợ tool
+## Tool support matrix
 
-| Tool | Chặn prompt | Chặn file | Ghi chú |
-|------|:---:|:---:|---------|
+| Tool | Block prompt | Block file | Notes |
+|------|:---:|:---:|-------|
 | Claude Code | ✅ | ✅ | UserPromptSubmit + PreToolUse (Read/Glob/Grep) |
 | Codex CLI | ✅ | ✅ | PreToolUse: Edit/Write/apply_patch/MCP |
 | OpenCode | ✅ | ✅ | plugin shim `.opencode/plugins/ai-guard.ts` |
-| Pi | ⚠️ best-effort | ✅ | tool_call chặn thật (`{block}`); prompt-side best-effort |
-| Cline | ✅ | ✅ | script hooks `.clinerules/hooks/` (macOS/Linux; bật Features > Hooks) |
-| Kiro | ⚠️ | ⚠️ | best-effort (payload thiếu tool_input — [Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500)) + steering |
-| Copilot (VS Code) | ❌ | ✅ | `.github/hooks/*.json` (chat.useHooks); prompt không chặn được (giới hạn nền tảng) |
+| Pi | ⚠️ best-effort | ✅ | tool_call blocks natively (`{block}`); prompt side is best-effort |
+| Cline | ✅ | ✅ | script hooks in `.clinerules/hooks/` (macOS/Linux; enable Features > Hooks) |
+| Kiro | ⚠️ | ⚠️ | best-effort ([Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500): hook payload lacks tool_input) + steering file |
+| GitHub Copilot (VS Code) | ❌ | ✅ | `.github/hooks/*.json` PreToolUse (`chat.useHooks`); the chat/prompt side cannot be blocked — platform limitation |
 
-## Fallback (Python, không cần npm)
+## Fallback (Python, no npm required)
 
-Cho máy không có Node — chế độ này chỉ đăng ký hook cho **claude-code + codex** (đầy đủ 7 tool cần npm). Path chính cho máy không Node: **tải released zip** (đã kèm sẵn `rules.json` build sẵn — không cần bước build nào):
+For machines without Node. This mode registers hooks for **Claude Code + Codex only** (all 7 tools require npm):
+
+**Easiest** — download the released fallback zip (from [releases](https://github.com/vankhangfet/ai-credential-guard/releases)), then run the installer from your project directory:
 
 ```bash
-unzip ai-guard-fallback.zip && cd ai-guard-fallback          # hoặc giải nén bằng Explorer
-cd <thư-mục-dự-án-của-bạn>
-bash /path/to/ai-guard-fallback/install.sh        # macOS/Linux
+bash /path/to/fallback/install.sh          # macOS / Linux
 # Windows: powershell -File install.ps1
 ```
 
-Build từ source (khi chưa có released zip — chạy trên máy **CÓ Node**, 1 lần):
+**From source** (run on a machine *with* Node, once):
 
 ```bash
-git clone <repo> && cd ai-guard                          # <repo> = thay URL repo thật
-npm run build && cp dist/rules.json fallback/rules.json   # cần 1 lần để build rule artifact
-# sau đó copy thư mục fallback/ (hoặc cả repo) sang máy không Node và chạy install như trên
+git clone https://github.com/vankhangfet/ai-credential-guard.git
+cd ai-credential-guard
+npm run build && cp dist/rules.json fallback/rules.json
+# copy the fallback/ folder to the target machine, then run install.sh / install.ps1 from the project dir
 ```
 
-- Engine Python tại `.ai-guard/bin/engine.py`; block-flow hint trỏ đúng path đó
-- **KHÔNG có dist/rules.json → engine chỉ còn heuristic warn (KHÔNG chặn)** — installer sẽ cảnh báo
-- **Gỡ fallback**: không có uninstall script — khôi phục `.aiguard.bak` (backup đầu tiên) cho `.claude/settings.json` + `.codex/hooks.json`, hoặc xoá tay các entry chứa "ai-guard"; xóa `.ai-guard/` nếu muốn sạch hoàn toàn
+- The Python engine lives at `.ai-guard/bin/engine.py`; block messages point to that exact path.
+- **Without `rules.json` the engine degrades to warn-only heuristics (nothing is blocked)** — the installer prints a warning if the artifact is missing.
+- **Uninstalling the fallback** is manual: restore `.aiguard.bak` (first-run backup) for `.claude/settings.json` and `.codex/hooks.json`, or remove the entries containing `ai-guard` by hand; delete `.ai-guard/` when you want a clean slate.
 
-## Hiệu năng & lưu ý
+## Performance notes
 
-- Hook là process ngắn: local install (`npm i -D`) ≈ 0.3-0.5s/lần gọi; **không có local install, npx fallback có thể ~6s trên Windows** — luôn khuyến nghị `npm i -D ai-credential-guard`
-- `uninstall --purge` **xóa vĩnh viễn audit log** — không hỏi lại
+- Hooks are short-lived processes. With a local install (`npm i -D ai-credential-guard`): **~0.3–0.5s per call**.
+- Without a local install, the `npx` fallback can take **~6s per call on Windows** — always prefer the local install.
+- `npx ai-guard uninstall --purge` **permanently deletes the audit log** without asking.
 
-## Lệnh
+## CLI reference
 
-`init` · `check-prompt` · `check-file` · `allow` · `doctor` · `self-test` · `uninstall [--purge]` · `version`
+| Command | Purpose |
+|---------|---------|
+| `init` | scaffold `.ai-guard/`, register hooks for detected tools (`--tools a,b,c` to force, `--no-instructions` to skip education files) |
+| `check-prompt` | scan a prompt from stdin JSON (or raw text); exit 2 blocks it |
+| `check-file <path>` | check a file path against sensitive-path rules; exit 2 blocks the read |
+| `allow prompt \| file <path> --Nm` | grant a bypass for N minutes (1–1440), always audited |
+| `doctor` | verify engine, rules, and every registered hook |
+| `self-test` | run the built-in fixture suite against the engine |
+| `uninstall [--purge]` | remove hooks (keep `.ai-guard/` by default; `--purge` deletes everything incl. audit log) |
+| `version` | print the version |
 
-## Phát triển
+## Development
 
 ```bash
 npm install && npm test && npm run build
-python -m unittest discover -s fallback/tests -t .   # engine python (23 tests)
+python -m unittest discover -s fallback/tests -t .   # Python fallback engine (23 tests)
 ```
 
-CI: 3 OS × Node 20/22 + Python + installer smoke (bash + PowerShell). Phát hành npm: `npm publish` (prepare tự build); fallback zip: `fallback/{engine.py,install.sh,install.ps1,rules.json}` (rules.json copy từ dist sau build).
+CI runs on 3 OS × Node 20/22, plus a Python matrix and installer smoke tests (bash + PowerShell, both executing the installed engine). Releasing to npm: `npm publish` (the `prepare` script builds automatically). The fallback zip is `fallback/{engine.py,install.sh,install.ps1}` + `dist/rules.json` copied in after a build.
 
 ## License
 
-[MIT](LICENSE) (đổi thành URL tuyệt đối khi có repo URL)
+[MIT](LICENSE)

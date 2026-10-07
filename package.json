@@ -1,12 +1,19 @@
 {
   "name": "ai-credential-guard",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Prevent credentials from leaking to AI coding tools (prompt + file hooks)",
   "type": "commonjs",
   "license": "MIT",
-  "bin": { "ai-guard": "dist/cli.js" },
-  "files": ["dist", "templates"],
-  "engines": { "node": ">=20" },
+  "bin": {
+    "ai-guard": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "templates"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "build": "tsc && node dist/scripts/export-rules.js",
     "test": "vitest run",
