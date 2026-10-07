@@ -40,13 +40,13 @@ jobs:
         run: head -1 dist/cli.js | grep -q '#!'
 
       - name: Publish to npm
-        if: ${{ env.NPM_TOKEN != '' }}
+        if: ${{ secrets.NPM_TOKEN != '' }}
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish skipped — missing NPM_TOKEN secret
-        if: ${{ env.NPM_TOKEN == '' }}
+        if: ${{ secrets.NPM_TOKEN == '' }}
         run: |
           echo "::warning::NPM_TOKEN secret chưa cấu hình — bỏ qua npm publish. Thêm repo Settings → Secrets and variables → Actions → NPM_TOKEN (granular token read/write packages) để bật."
         env:
@@ -65,7 +65,5 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Verify on registry
-        if: ${{ env.NPM_TOKEN != '' }}
+        if: ${{ secrets.NPM_TOKEN != '' }}
         run: npm view ai-credential-guard version dist-tags --json
-        env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
