@@ -1,8 +1,8 @@
 <!-- ai-guard:start -->
-## Bảo mật credential (ai-guard)
+## Credential security (ai-guard)
 
-- Không yêu cầu người dùng cung cấp API key, password, private key hay connection string thật.
-- Nếu cần biến môi trường, đọc tên biến từ `.env.example` — không đọc `.env`.
-- Không mở các file: `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets/**`.
-- Khi user dán secret vào prompt, nhắc họ thu hồi và xoá secret đó khỏi lịch sử.
+- Never ask the user for real API keys, passwords, private keys, or connection strings.
+- If you need environment variables, read variable names from `.env.example` — do not read `.env`.
+- Do not open these files: `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets/**`.
+- If the user pastes a secret into the prompt, remind them to revoke it and remove it from the conversation history.
 <!-- ai-guard:end -->

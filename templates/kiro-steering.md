@@ -1,8 +1,8 @@
 <!-- ai-guard:start -->
-## Bảo mật credential (ai-guard)
+## Credential security (ai-guard)
 
-- KHÔNG yêu cầu hoặc đọc credential thật: `.env`, `*.pem`, `id_rsa`, `credentials*`, API key, password, private key, connection string.
-- Cần biến môi trường? Dùng `.env.example` hoặc giá trị giả (dummy) — không mở file thật.
-- KHÔNG lặp lại secret mà user đã dán vào prompt — nhắc họ thu hồi (revoke) và xoá khỏi lịch sử.
-- Hook `PreToolUse` của ai-guard chỉ là best-effort trên Kiro (payload có thể thiếu tool_input) — coi steering này là rào chắn chính.
+- NEVER request or read real credentials: `.env`, `*.pem`, `id_rsa`, `credentials*`, API keys, passwords, private keys, connection strings.
+- Need environment variables? Use `.env.example` or dummy values — do not open the real files.
+- NEVER repeat a secret the user pasted into the prompt — remind them to revoke it and remove it from history.
+- The ai-guard `PreToolUse` hook is best-effort on Kiro (payload may lack tool_input) — treat this steering file as the primary guard.
 <!-- ai-guard:end -->
