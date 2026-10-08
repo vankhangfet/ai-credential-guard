@@ -1,5 +1,10 @@
 # ai-credential-guard
 
+[![npm version](https://img.shields.io/npm/v/ai-credential-guard)](https://www.npmjs.com/package/ai-credential-guard)
+[![npm downloads](https://img.shields.io/npm/dt/ai-credential-guard)](https://www.npmjs.com/package/ai-credential-guard)
+[![CI](https://github.com/vankhangfet/ai-credential-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/vankhangfet/ai-credential-guard/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 **Stop secrets from leaking to AI models while you code.**
 
 `ai-credential-guard` hooks into your AI coding tools and blocks API keys, passwords, private keys and connection strings **before** they are sent to the model — whether you paste them into a prompt or the agent tries to read a file like `.env`.
