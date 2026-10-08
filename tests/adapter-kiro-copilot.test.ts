@@ -7,8 +7,11 @@ import { copilotAdapter } from "../src/adapters/copilot";
 
 // Step 0 (verified):
 //  - Kiro (kiro.dev/docs/hooks): hooks = JSON files trong `.kiro/hooks/`, schema
-//    { version: "v1", hooks: [{ name, trigger: "PreToolUse", action: { type: "command", command } }] }.
-//    GIỚI HẠN (kirodotdev/Kiro#7500): IDE runCommand hooks KHÔNG nhận tool_input -> best-effort.
+//    { version: "v1", hooks: [{ name, trigger, action: { type: "command", command } }] }.
+//    USER-VERIFIED: trigger "UserPromptSubmit" + command action WORKS — stdin payload có
+//    prompt text (alias keys prompt|userPrompt|message|text|input|content) và exit 2
+//    BLOCKS prompt. GIỚI HẠN (kirodotdev/Kiro#7500): IDE runCommand hooks KHÔNG nhận
+//    tool_input -> PreToolUse/check-file là best-effort (tool side only).
 //  - Copilot/VS Code (code.visualstudio.com/docs/agent-customization/hooks): project-level hooks
 //    tồn tại — `.github/hooks/*.json` (Local harness, chat.useHooks ON mặc định), PreToolUse stdin
 //    có tool_input, exit 2 = block. Chat/prompt-side KHÔNG chặn được -> education layer chính.
@@ -17,26 +20,31 @@ const KIRO_STEERING = join(".kiro", "steering", "security.md");
 const COPILOT_HOOK = join(".github", "hooks", "ai-guard.json");
 const COPILOT_INSTR = join(".github", "copilot-instructions.md");
 
-describe("kiro adapter (best-effort hook + steering education)", () => {
+describe("kiro adapter (prompt-blocking hook + best-effort tool hook + steering education)", () => {
   it("detect .kiro dir", () => {
     expect(kiroAdapter.detect(mkproject({ kiro: true }))).toBe(true);
     expect(kiroAdapter.detect(mkproject({}))).toBe(false);
   });
-  it("install tạo hook PreToolUse + steering; idempotent; detail nêu best-effort", () => {
+  it("install tạo hooks UserPromptSubmit + PreToolUse + steering; idempotent; detail nêu cả 2 hook", () => {
     const root = mkproject({ kiro: true });
     const r = kiroAdapter.install(root, { instructions: true });
     expect(r.ok).toBe(true);
     expect(r.detail).toContain("best-effort");
+    expect(r.detail).toContain("UserPromptSubmit");
     const hook = JSON.parse(readFileSync(join(root, KIRO_HOOK), "utf8"));
     expect(hook.version).toBe("v1");
-    expect(hook.hooks).toHaveLength(1);
-    expect(hook.hooks[0].trigger).toBe("PreToolUse");
-    expect(hook.hooks[0].action.type).toBe("command");
-    expect(hook.hooks[0].action.command).toContain("check-file --tool kiro");
+    expect(hook.hooks).toHaveLength(2);
+    const triggers = hook.hooks.map((h: any) => h.trigger);
+    expect(triggers).toContain("UserPromptSubmit");
+    expect(triggers).toContain("PreToolUse");
+    const byTrigger = Object.fromEntries(hook.hooks.map((h: any) => [h.trigger, h]));
+    expect(byTrigger.UserPromptSubmit.action.type).toBe("command");
+    expect(byTrigger.UserPromptSubmit.action.command).toContain("check-prompt --tool kiro");
+    expect(byTrigger.PreToolUse.action.command).toContain("check-file --tool kiro");
     expect(readFileSync(join(root, KIRO_STEERING), "utf8")).toContain("ai-guard:start");
     // idempotent: chạy lại không nhân bản hook/section
     kiroAdapter.install(root, { instructions: true });
-    expect(JSON.parse(readFileSync(join(root, KIRO_HOOK), "utf8")).hooks).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(root, KIRO_HOOK), "utf8")).hooks).toHaveLength(2);
     expect((readFileSync(join(root, KIRO_STEERING), "utf8").match(/ai-guard:start/g) ?? []).length).toBe(1);
   });
   it("install --no-instructions chỉ hook; hook lạ chiếm slot -> từ chối (atomic, không ghi steering)", () => {
@@ -61,7 +69,7 @@ describe("kiro adapter (best-effort hook + steering education)", () => {
     expect(existsSync(join(root, KIRO_HOOK))).toBe(false);
     expect(existsSync(join(root, KIRO_STEERING))).toBe(true);
   });
-  it("doctor: detail LUÔN kèm best-effort + issue ref (trước cả khi thiếu hook)", () => {
+  it("doctor: trước install fail; sau install ok — detail nêu prompt + best-effort tool side", () => {
     const root = mkproject({ kiro: true });
     const before = kiroAdapter.doctor(root);
     expect(before.ok).toBe(false);
@@ -69,12 +77,31 @@ describe("kiro adapter (best-effort hook + steering education)", () => {
     kiroAdapter.install(root, { instructions: false });
     const after = kiroAdapter.doctor(root);
     expect(after.ok).toBe(true);
+    expect(after.detail).toContain("prompt");
     expect(after.detail).toContain("best-effort");
     expect(after.detail).toContain("kirodotdev/Kiro#7500");
     // Fix 3 (coordinator): doctor nêu trạng thái steering (ok-logic không đổi)
     expect(after.detail).toContain("missing steering");
     kiroAdapter.install(root, { instructions: true });
     expect(kiroAdapter.doctor(root).detail).toContain("steering security.md");
+  });
+  it("doctor: hook file cũ chỉ có PreToolUse (thiếu UserPromptSubmit) -> not ok; re-install sửa", () => {
+    const root = mkproject({ kiro: true });
+    mkdirSync(join(root, ".kiro", "hooks"), { recursive: true });
+    // format <=1.0.x: chỉ entry PreToolUse của ai-guard (command có marker "ai-guard")
+    writeFileSync(join(root, KIRO_HOOK), JSON.stringify(
+      {
+        version: "v1",
+        hooks: [{ name: "ai-guard-check-file", trigger: "PreToolUse", action: { type: "command", command: "npx --no-install ai-guard check-file --tool kiro" } }],
+      },
+      null,
+      2,
+    ));
+    const d = kiroAdapter.doctor(root);
+    expect(d.ok).toBe(false);
+    expect(d.detail).toContain("UserPromptSubmit");
+    kiroAdapter.install(root, { instructions: false });
+    expect(kiroAdapter.doctor(root).ok).toBe(true);
   });
 });
 

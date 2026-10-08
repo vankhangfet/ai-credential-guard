@@ -56,6 +56,13 @@ describe("check-prompt", () => {
     const payload = JSON.stringify({ clineVersion: "3.36", question: "dùng key AKIAIOSFODNN7EXAMPLE giúp tôi" });
     expect(await runCli(["check-prompt", "--root", root], payload)).toBe(2);
   });
+  it("payload key userPrompt (kiro UserPromptSubmit) -> extract + block", async () => {
+    // user-verified: Kiro hook payload prompt text findable dưới key userPrompt
+    expect(await runCli(["check-prompt", "--root", root], JSON.stringify({ userPrompt: "AKIAIOSFODNN7EXAMPLE" }))).toBe(2);
+  });
+  it("payload key content (kiro UserPromptSubmit alias) -> extract + block", async () => {
+    expect(await runCli(["check-prompt", "--root", root], JSON.stringify({ content: "x ghp_" + "a".repeat(36) }))).toBe(2);
+  });
   it("warn + block -> 2 events đúng thứ tự (warned rồi blocked)", async () => {
     const code = await runCli(["check-prompt", "--root", root], stdinOf(root, "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U và AKIAIOSFODNN7EXAMPLE"));
     expect(code).toBe(2);

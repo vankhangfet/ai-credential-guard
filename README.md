@@ -67,7 +67,7 @@ Bypass windows range from 1 to 1440 minutes, and **every bypass is recorded** in
 | OpenCode | ✅ | ✅ | via plugin `.opencode/plugins/ai-guard.ts` |
 | Cline | ✅ | ✅ | macOS/Linux; enable *Features → Hooks* |
 | Pi | ⚠️ | ✅ | prompt blocking is best-effort |
-| Kiro | ⚠️ | ⚠️ | best-effort, limited by [Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500) |
+| Kiro | ✅ | ⚠️ | prompt hook verified; tool-side best-effort ([Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500)) |
 | GitHub Copilot (VS Code) | ❌ | ✅ | chat input can't be intercepted (platform limit); requires `chat.useHooks` |
 
 ---

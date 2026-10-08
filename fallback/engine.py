@@ -445,10 +445,12 @@ def flag_value(argv: list, flag: str):
 
 
 def extract_prompt(input_text: str):
-    """JSON alias fields (prompt/input/message/text) -> else fallthrough quét RAW.
+    """JSON alias fields (prompt/input/message/text/userPrompt/content) -> else RAW.
 
-    JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng field
-    name lạ) -> quét raw: secret vẫn nằm nguyên văn trong JSON text.
+    Alias keys mirror src/commands/check-prompt.ts — thêm userPrompt/content cho
+    Kiro UserPromptSubmit (user-verified: prompt text findable dưới 1 trong các
+    key đó). JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng
+    field name lạ) -> quét raw: secret vẫn nằm nguyên văn trong JSON text.
     """
     s = input_text.strip()
     if not s:
@@ -459,7 +461,7 @@ def extract_prompt(input_text: str):
         except ValueError:
             j = None
         if isinstance(j, dict):
-            for key in ("prompt", "input", "message", "text"):
+            for key in ("prompt", "input", "message", "text", "userPrompt", "content"):
                 v = j.get(key)
                 if isinstance(v, str):
                     return v

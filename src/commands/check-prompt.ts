@@ -11,7 +11,9 @@ export function extractPrompt(input: string): string | null {
   if (s.startsWith("{")) {
     try {
       const j = JSON.parse(s);
-      const p = [j?.prompt, j?.input, j?.message, j?.text].find((v) => typeof v === "string");
+      // Alias keys mở rộng cho Kiro UserPromptSubmit (user-verified: prompt text findable
+      // dưới prompt|userPrompt|message|text|input|content) — mirror fallback/engine.py.
+      const p = [j?.prompt, j?.input, j?.message, j?.text, j?.userPrompt, j?.content].find((v) => typeof v === "string");
       // JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng field name lạ) ->
       // fall-through quét RAW: prompt/secret vẫn nằm nguyên văn trong JSON text (fallback
       // alias-miss của cline UserPromptSubmit shim truyền nguyên raw stdin).

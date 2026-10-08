@@ -4,16 +4,19 @@ import type { AdapterBase, InstallOptions, InstallResult } from "./types";
 import { MARKER } from "../util/json-config";
 import { appendMarkedSection, templatePath } from "./hooks-json";
 
-// Kiro — best-effort hook + education layer (steering).
+// Kiro — prompt-blocking hook (user-verified) + best-effort tool hook + education layer (steering).
 // Step 0 verified (kiro.dev/docs/hooks): hooks là các JSON file trong `.kiro/hooks/`, schema
 // { version: "v1", hooks: [{ name, description?, trigger (PascalCase, vd "PreToolUse"),
 // matcher? (regex khớp tool name), action: { type: "command" | "agent", command | prompt },
 // timeout? }] }. Command action chạy tại project root, nhận session context JSON trên stdin.
+// USER-VERIFIED (hand test trên Kiro thật): trigger "UserPromptSubmit" + action command
+// WORKS — payload stdin có prompt text (findable dưới alias keys prompt|userPrompt|message|
+// text|input|content — xem extractPrompt) và exit 2 BLOCKS prompt trước khi tới model.
 // GIỚI HẠN ĐÃ XÁC NHẬN (github.com/kirodotdev/Kiro#7500): runCommand hooks trong Kiro IDE
 // KHÔNG nhận tool_name/tool_input (stdin rỗng, không env) — chỉ Kiro CLI truyền payload đầy
-// đủ. CLI check-file không thấy path -> exit 0 (fail-open). Vậy hook là best-effort; steering
-// (.kiro/steering/*.md, được Kiro nạp vào agent context) là lớp chính. Install/doctor detail
-// LUÔN nêu rõ "best-effort".
+// đủ. CLI check-file không thấy path -> exit 0 (fail-open). Vậy CHỈ tool-side (PreToolUse)
+// là best-effort; steering (.kiro/steering/*.md, được Kiro nạp vào agent context) vẫn là
+// lớp education chính. Install/doctor detail nêu rõ best-effort cho tool side.
 const HOOK_REL = join(".kiro", "hooks", "ai-guard.json");
 const STEERING_REL = join(".kiro", "steering", "security.md");
 
@@ -25,11 +28,18 @@ const HOOK_BODY =
       version: "v1",
       hooks: [
         {
+          name: "ai-guard prompt check",
+          description: "Scans submitted prompts for credentials; exit 2 blocks the prompt before it reaches the model.",
+          trigger: "UserPromptSubmit",
+          action: { type: "command", command: "npx --no-install ai-guard check-prompt --tool kiro" },
+          timeout: 30, // npx fallback có thể mất ~6-10s lần đầu — default 60 là dư, 15 là chặt
+        },
+        {
           name: "ai-guard-check-file",
           description: "ai-guard (best-effort): block credential reads — IDE payload may lack tool_input (kirodotdev/Kiro#7500)",
           trigger: "PreToolUse",
           action: { type: "command", command: "npx --no-install ai-guard check-file --tool kiro" },
-          timeout: 30, // npx fallback có thể mất ~6-10s lần đầu — default 60 là dư, 15 là chặt
+          timeout: 30,
         },
       ],
     },
@@ -37,7 +47,8 @@ const HOOK_BODY =
     2,
   ) + "\n";
 
-const BEST_EFFORT = "best-effort — NOTE: Kiro hook payload may lack tool_input (kirodotdev/Kiro#7500)";
+// Chỉ tool side (PreToolUse/check-file) là best-effort; prompt side (UserPromptSubmit) chặn thật.
+const TOOL_BEST_EFFORT = "tool side best-effort — IDE payload may lack tool_input (kirodotdev/Kiro#7500)";
 
 export const kiroAdapter: AdapterBase = {
   id: "kiro",
@@ -71,7 +82,7 @@ export const kiroAdapter: AdapterBase = {
       return {
         adapter: "kiro",
         ok: true,
-        detail: `hook PreToolUse best-effort (${HOOK_REL}) + education layer ${STEERING_REL} — steering is the primary layer`,
+        detail: `hooks UserPromptSubmit (prompt, user-verified) + PreToolUse (${TOOL_BEST_EFFORT}) at ${HOOK_REL} + education layer ${STEERING_REL}`,
       };
     } catch (e) {
       return { adapter: "kiro", ok: false, detail: String(e) };
@@ -99,19 +110,40 @@ export const kiroAdapter: AdapterBase = {
   doctor(root: string) {
     const hookPath = join(root, HOOK_REL);
     if (!existsSync(hookPath)) {
-      return { ok: false, detail: `missing ai-guard hook: ${HOOK_REL} (${BEST_EFFORT})` };
+      return { ok: false, detail: `missing ai-guard hooks: ${HOOK_REL} — expected UserPromptSubmit (prompt) + PreToolUse (${TOOL_BEST_EFFORT})` };
     }
-    const ours = readFileSync(hookPath, "utf8").includes(MARKER);
-    // Steering là lớp chính trên Kiro — nêu trạng thái trong detail (không đổi ok-logic,
-    // hook vẫn là mốc ok như các adapter khác).
+    const raw = readFileSync(hookPath, "utf8");
+    if (!raw.includes(MARKER)) {
+      return { ok: false, detail: `${HOOK_REL} exists but does not belong to ai-guard (${TOOL_BEST_EFFORT})` };
+    }
+    // Ok đòi hỏi ĐỦ 2 trigger: UserPromptSubmit (check-prompt — prompt blocking) VÀ
+    // PreToolUse (check-file — tool side). File cũ chỉ có PreToolUse (<=1.0.x) hoặc
+    // thiếu 1 entry -> re-run install.
+    let entries: Array<{ trigger?: unknown; action?: { command?: unknown } }> = [];
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.hooks)) entries = parsed.hooks;
+    } catch { /* JSON hỏng -> entries rỗng -> missing cả 2 */ }
+    const has = (trigger: string, cmdPart: string) =>
+      entries.some(
+        (h) => h?.trigger === trigger && typeof h?.action?.command === "string" && h.action.command.includes(cmdPart),
+      );
+    const promptHook = has("UserPromptSubmit", "check-prompt --tool kiro");
+    const toolHook = has("PreToolUse", "check-file --tool kiro");
+    // Steering là lớp education chính trên Kiro — nêu trạng thái trong detail (không đổi
+    // ok-logic, hooks vẫn là mốc ok như các adapter khác).
     const steeringNote = existsSync(join(root, STEERING_REL))
       ? " + steering security.md"
       : " (missing steering — re-run install with instructions)";
+    if (!promptHook || !toolHook) {
+      const missing = [!promptHook && "UserPromptSubmit (check-prompt)", !toolHook && "PreToolUse (check-file)"]
+        .filter(Boolean)
+        .join(" + ");
+      return { ok: false, detail: `${HOOK_REL} outdated — missing ${missing}; re-run install (${TOOL_BEST_EFFORT})` };
+    }
     return {
-      ok: ours,
-      detail: ours
-        ? `hook PreToolUse installed${steeringNote} (${BEST_EFFORT})`
-        : `${HOOK_REL} exists but does not belong to ai-guard (${BEST_EFFORT})`,
+      ok: true,
+      detail: `hooks registered (prompt + tool; ${TOOL_BEST_EFFORT})${steeringNote}`,
     };
   },
 };
