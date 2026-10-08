@@ -163,6 +163,18 @@ class EngineCliTests(unittest.TestCase):
         self.assertNotEqual(blocked[0].get("preview"), AWS_KEY)
         self.assertNotIn(AWS_KEY, self.audit_raw_text())
 
+    # -- 2b. kiro UserPromptSubmit payload: prompt nằm dưới key "userPrompt" --
+
+    def test_userprompt_alias_key_blocks(self):
+        # Kiro UserPromptSubmit (user-verified): stdin payload có prompt text dưới
+        # key "userPrompt" — extract_prompt phải lấy đúng field rồi block (rc 2).
+        r = self.check_prompt(json.dumps({"userPrompt": AWS_KEY}))
+        self.assertEqual(r.returncode, 2, msg=r.stdout + r.stderr)
+        self.assertIn("BLOCKED", r.stderr)
+        blocked = [e for e in self.audit_events()
+                   if e.get("event") == "prompt" and e.get("action") == "blocked"]
+        self.assertEqual(blocked[0].get("rule"), "aws-access-key")
+
     # -- 3. jwt-only warns, exit 0 -----------------------------------------
 
     def test_jwt_only_prompt_warns_but_exits_0(self):
