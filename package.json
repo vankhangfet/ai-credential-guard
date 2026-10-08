@@ -1,7 +1,7 @@
 {
   "name": "ai-credential-guard",
-  "version": "1.0.2",
-  "description": "Prevent credentials from leaking to AI coding tools (prompt + file hooks)",
+  "version": "1.0.3",
+  "description": "Stop secrets from leaking to AI models while you code.",
   "type": "commonjs",
   "license": "MIT",
   "bin": {

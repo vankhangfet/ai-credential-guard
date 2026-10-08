@@ -1,102 +1,155 @@
 # ai-credential-guard
 
-> Published as `ai-credential-guard` on npm — the binary is `ai-guard`, so all commands stay `npx ai-guard ...`.
+**Stop secrets from leaking to AI models while you code.**
 
-Stop credentials from leaking to AI providers while you work with AI coding tools. ai-credential-guard hooks into the **prompt** and **file-read** path of 7 tools — **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, GitHub Copilot (VS Code)** — and blocks API keys, passwords, private keys, and connection strings *before* they reach the model. Deliberate overrides are allowed through a time-window bypass that is always recorded in an audit log.
+`ai-credential-guard` hooks into your AI coding tools and blocks API keys, passwords, private keys and connection strings **before** they are sent to the model — whether you paste them into a prompt or the agent tries to read a file like `.env`.
 
-## Install (2 main commands, requires Node ≥ 20)
+Works with **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, and GitHub Copilot (VS Code)**.
 
-```bash
-npm i -D ai-credential-guard   # local install — hooks run offline, ~0.3–0.5s per call (recommended)
-npx ai-guard init              # auto-detects the AI tools in your project and registers hooks
-npx ai-guard doctor            # verify hooks + engine
-```
+> npm package: `ai-credential-guard` · CLI command: `ai-guard`
 
-Then **commit the generated hook config files** (`.claude/settings.json`, `.codex/hooks.json`, `.opencode/`, `.pi/`, `.clinerules/hooks/`, `.kiro/`, `.github/hooks/`, `CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`). Teammates who clone the repo are already protected — they just run `npm i`.
+---
 
-No Node on the machine? See [Fallback (Python)](#fallback-python-no-npm-required).
+## Quick start
 
-## How it works
-
-```
-prompt / file read ──▶ tool hook ──▶ ai-guard check-* ──▶ clean ──▶ pass through
-                                              │
-                                              └─ credential detected (severity: block)
-                                                   ──▶ BLOCKED + bypass instructions
-
-Deliberate bypass:   npx ai-guard allow prompt --5m        (or: allow file .env --10m)
-                     ──▶ allowed for N minutes (1–1440) + audit entry
-```
-
-- **Audit log** — `.ai-guard/logs/YYYY-MM-DD.jsonl`. Secrets are always masked (`sk-ant***k3Jg`); raw secrets never reach the log or stderr.
-- **Extensible rules** — `.ai-guard/rules.json` with `add` (new rule; a duplicate id *replaces* the built-in), `override` (change severity), `remove`. Add your internal token format without touching code. Note: the `example-internal` demo rule (`CORP-*`) ships enabled — edit or remove it to taste.
-- **Sensitive paths** — `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets/**`, and more; extend via `.ai-guard/config.json`.
-- **Fail-open** — if the engine cannot run, your workflow continues (a loud warning is printed to stderr). A guard should not break your day.
-- **Detection engine** — 50 built-in rules across 10 families (AWS/Google/Azure/Stripe, OpenAI/Anthropic/OpenRouter, GitHub/GitLab/Slack/npm, DB connection strings, config patterns, private keys, JWT) plus generic-assignment and Shannon-entropy heuristics (warn severity).
-
-## Tool support matrix
-
-| Tool | Block prompt | Block file | Notes |
-|------|:---:|:---:|-------|
-| Claude Code | ✅ | ✅ | UserPromptSubmit + PreToolUse (Read/Glob/Grep) |
-| Codex CLI | ✅ | ✅ | PreToolUse: Edit/Write/apply_patch/MCP |
-| OpenCode | ✅ | ✅ | plugin shim `.opencode/plugins/ai-guard.ts` |
-| Pi | ⚠️ best-effort | ✅ | tool_call blocks natively (`{block}`); prompt side is best-effort |
-| Cline | ✅ | ✅ | script hooks in `.clinerules/hooks/` (macOS/Linux; enable Features > Hooks) |
-| Kiro | ⚠️ | ⚠️ | best-effort ([Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500): hook payload lacks tool_input) + steering file |
-| GitHub Copilot (VS Code) | ❌ | ✅ | `.github/hooks/*.json` PreToolUse (`chat.useHooks`); the chat/prompt side cannot be blocked — platform limitation |
-
-## Fallback (Python, no npm required)
-
-For machines without Node. This mode registers hooks for **Claude Code + Codex only** (all 7 tools require npm):
-
-**Easiest** — download the released fallback zip (from [releases](https://github.com/vankhangfet/ai-credential-guard/releases)), then run the installer from your project directory:
+Requires **Node.js ≥ 20**. Run in your project root:
 
 ```bash
-bash /path/to/fallback/install.sh          # macOS / Linux
-# Windows: powershell -File install.ps1
+npm i -D ai-credential-guard   # 1. install locally (fast, works offline)
+npx ai-guard init              # 2. detect your AI tools and register hooks
+npx ai-guard doctor            # 3. verify everything is wired up
 ```
 
-**From source** (run on a machine *with* Node, once):
+Then **commit the generated config files** (e.g. `.claude/settings.json`, `.codex/hooks.json`, `.github/hooks/`, `CLAUDE.md`, `AGENTS.md`…).
+Teammates who clone the repo are protected automatically after `npm i`.
+
+No Node.js? → see [Python fallback](#no-nodejs-python-fallback).
+
+---
+
+## What happens when something is blocked
+
+```
+prompt / file read ──▶ ai-guard check ──▶ clean?  ──▶ sent to the model
+                                      └─▶ secret found ──▶ BLOCKED (with bypass instructions)
+```
+
+If the block is intentional (e.g. you really need the agent to read `.env`), grant a temporary bypass:
+
+```bash
+npx ai-guard allow prompt --5m       # allow prompts for 5 minutes
+npx ai-guard allow file .env --10m   # allow reading .env for 10 minutes
+```
+
+Bypass windows range from 1 to 1440 minutes, and **every bypass is recorded** in the audit log.
+
+---
+
+## What gets detected
+
+- **50 built-in rules**: cloud keys (AWS, Google, Azure, Stripe), AI keys (OpenAI, Anthropic, OpenRouter), dev platform tokens (GitHub, GitLab, Slack, npm), database connection strings, private keys, JWTs and common config patterns.
+- **Heuristics** (warn only, never block): generic `password = ...` assignments and high-entropy strings.
+- **Sensitive files**: `.env*`, `*.pem`, `*.key`, `id_rsa*`, `credentials*`, `secrets/**` and more.
+
+---
+
+## Supported tools
+
+| Tool | Blocks prompts | Blocks file reads | Notes |
+|---|:---:|:---:|---|
+| Claude Code | ✅ | ✅ | |
+| Codex CLI | ✅ | ✅ | |
+| OpenCode | ✅ | ✅ | via plugin `.opencode/plugins/ai-guard.ts` |
+| Cline | ✅ | ✅ | macOS/Linux; enable *Features → Hooks* |
+| Pi | ⚠️ | ✅ | prompt blocking is best-effort |
+| Kiro | ⚠️ | ⚠️ | best-effort, limited by [Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500) |
+| GitHub Copilot (VS Code) | ❌ | ✅ | chat input can't be intercepted (platform limit); requires `chat.useHooks` |
+
+---
+
+## Configuration
+
+Everything lives in the `.ai-guard/` folder of your project:
+
+| File | Use it to |
+|---|---|
+| `rules.json` | add your own token formats (`add`), change a rule's severity (`override`), or disable a rule (`remove`). Reusing a built-in rule id replaces it. |
+| `config.json` | add more sensitive file paths |
+| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`) |
+
+> ⚠️ A demo rule `example-internal` (matches `CORP-*`) is enabled by default — edit or remove it.
+
+---
+
+## Good to know
+
+- **Fail-open:** if the engine can't run, your AI tool keeps working and a warning is printed. The guard never blocks your workflow by crashing.
+- **Speed:** ~0.3–0.5 s per check with a local install. Without it, `npx` may take ~6 s per check on Windows — always install locally.
+- **Uninstall:** `npx ai-guard uninstall` removes the hooks but keeps `.ai-guard/`. Adding `--purge` **deletes the audit log too, without confirmation**.
+
+---
+
+## No Node.js? (Python fallback)
+
+The Python fallback protects **Claude Code and Codex only**. For all 7 tools, use the npm version.
+
+1. Download the fallback zip from [Releases](https://github.com/vankhangfet/ai-credential-guard/releases).
+2. From your project directory, run:
+
+   ```bash
+   bash /path/to/fallback/install.sh        # macOS / Linux
+   powershell -File install.ps1             # Windows
+   ```
+
+Notes:
+- The engine is installed at `.ai-guard/bin/engine.py`.
+- If `rules.json` is missing, the engine **only warns and blocks nothing** (the installer will tell you).
+- To uninstall, restore the `.aiguard.bak` backups of `.claude/settings.json` and `.codex/hooks.json` (or remove the `ai-guard` entries manually), then delete `.ai-guard/`.
+
+<details>
+<summary>Build the fallback from source</summary>
+
+On a machine **with** Node.js:
 
 ```bash
 git clone https://github.com/vankhangfet/ai-credential-guard.git
 cd ai-credential-guard
 npm run build && cp dist/rules.json fallback/rules.json
-# copy the fallback/ folder to the target machine, then run install.sh / install.ps1 from the project dir
 ```
 
-- The Python engine lives at `.ai-guard/bin/engine.py`; block messages point to that exact path.
-- **Without `rules.json` the engine degrades to warn-only heuristics (nothing is blocked)** — the installer prints a warning if the artifact is missing.
-- **Uninstalling the fallback** is manual: restore `.aiguard.bak` (first-run backup) for `.claude/settings.json` and `.codex/hooks.json`, or remove the entries containing `ai-guard` by hand; delete `.ai-guard/` when you want a clean slate.
+Copy the `fallback/` folder to the target machine and run the installer as above.
+</details>
 
-## Performance notes
-
-- Hooks are short-lived processes. With a local install (`npm i -D ai-credential-guard`): **~0.3–0.5s per call**.
-- Without a local install, the `npx` fallback can take **~6s per call on Windows** — always prefer the local install.
-- `npx ai-guard uninstall --purge` **permanently deletes the audit log** without asking.
+---
 
 ## CLI reference
 
-| Command | Purpose |
-|---------|---------|
-| `init` | scaffold `.ai-guard/`, register hooks for detected tools (`--tools a,b,c` to force, `--no-instructions` to skip education files) |
-| `check-prompt` | scan a prompt from stdin JSON (or raw text); exit 2 blocks it |
-| `check-file <path>` | check a file path against sensitive-path rules; exit 2 blocks the read |
-| `allow prompt \| file <path> --Nm` | grant a bypass for N minutes (1–1440), always audited |
-| `doctor` | verify engine, rules, and every registered hook |
-| `self-test` | run the built-in fixture suite against the engine |
-| `uninstall [--purge]` | remove hooks (keep `.ai-guard/` by default; `--purge` deletes everything incl. audit log) |
-| `version` | print the version |
+| Command | Description |
+|---|---|
+| `init` | Set up `.ai-guard/` and register hooks for detected tools. Options: `--tools a,b,c` to choose tools, `--no-instructions` to skip guidance files. |
+| `doctor` | Check the engine, rules and all registered hooks. |
+| `allow prompt --Nm` | Allow prompts for N minutes (audited). |
+| `allow file <path> --Nm` | Allow reading a file for N minutes (audited). |
+| `check-prompt` | Scan a prompt from stdin. Exit code `2` = blocked. |
+| `check-file <path>` | Check a path against sensitive-file rules. Exit code `2` = blocked. |
+| `self-test` | Run the built-in test fixtures against the engine. |
+| `uninstall [--purge]` | Remove hooks. `--purge` also deletes `.ai-guard/` including logs. |
+| `version` | Print the version. |
 
-## Development
+---
+
+<details>
+<summary><b>Development</b></summary>
 
 ```bash
 npm install && npm test && npm run build
-python -m unittest discover -s fallback/tests -t .   # Python fallback engine (23 tests)
+python -m unittest discover -s fallback/tests -t .   # Python fallback tests
 ```
 
-CI runs on 3 OS × Node 20/22, plus a Python matrix and installer smoke tests (bash + PowerShell, both executing the installed engine). Releasing to npm: `npm publish` (the `prepare` script builds automatically). The fallback zip is `fallback/{engine.py,install.sh,install.ps1}` + `dist/rules.json` copied in after a build.
+- CI: 3 OSes × Node 20/22, a Python matrix, and installer smoke tests (bash + PowerShell).
+- Publish: `npm publish` (the `prepare` script builds automatically).
+- Fallback zip contents: `fallback/{engine.py,install.sh,install.ps1}` + `dist/rules.json` (copied after a build).
+</details>
 
 ## License
 
