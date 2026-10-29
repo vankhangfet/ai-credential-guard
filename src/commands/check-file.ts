@@ -38,7 +38,7 @@ function extractPathCandidates(argv: string[], input: string): string[] {
         }
         return c;
       })
-      .filter((c): c is Record<string, unknown> => c !== null && typeof c === "object");
+      .filter((c): c is Record<string, unknown> => c !== null && typeof c === "object" && !Array.isArray(c));
     const p = containers
       .flatMap((c) => [c.file_path, c.notebook_path, c.filePath, c.path])
       .find((v) => typeof v === "string") ?? (typeof j?.path === "string" ? j.path : undefined);

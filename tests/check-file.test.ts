@@ -111,4 +111,13 @@ describe("check-file stdin payload (copilot CLI camelCase + kiro nested shapes)"
     const payload = JSON.stringify({ toolName: "bash", toolArgs: 42 });
     expect(await runCli(["check-file", "--root", root, "--tool", "copilot"], payload)).toBe(0);
   });
+  it("precedence giữa containers: tool_input (non-sensitive) thắng toolArgs (.env)", async () => {
+    writeFileSync(join(root, "readme.md"), "hi");
+    const payload = JSON.stringify({ tool_input: { path: join(root, "readme.md") }, toolArgs: { filePath: join(root, ".env") } });
+    expect(await runCli(["check-file", "--root", root, "--tool", "copilot"], payload)).toBe(0);
+  });
+  it("toolArgs là string không parse được JSON -> bỏ qua, exit 0", async () => {
+    const payload = JSON.stringify({ toolName: "read", toolArgs: "not json" });
+    expect(await runCli(["check-file", "--root", root, "--tool", "copilot"], payload)).toBe(0);
+  });
 });
