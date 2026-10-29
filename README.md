@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/ai-credential-guard)](https://www.npmjs.com/package/ai-credential-guard)
 [![npm downloads](https://img.shields.io/npm/dt/ai-credential-guard)](https://www.npmjs.com/package/ai-credential-guard)
 [![CI](https://github.com/vankhangfet/ai-credential-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/vankhangfet/ai-credential-guard/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/vankhangfet/ai-credential-guard/blob/main/LICENSE)
 
 **Stop secrets from leaking to AI models while you code.**
 
@@ -11,7 +11,7 @@
 
 Works with **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, and GitHub Copilot (VS Code)**.
 
-> npm package: `ai-credential-guard` · CLI command: `ai-guard`
+> npm package: [ai-credential-guard](https://www.npmjs.com/package/ai-credential-guard) · GitHub: [vankhangfet/ai-credential-guard](https://github.com/vankhangfet/ai-credential-guard) · CLI command: `ai-guard` · License: [MIT](https://github.com/vankhangfet/ai-credential-guard/blob/main/LICENSE)
 
 ---
 
@@ -158,4 +158,4 @@ python -m unittest discover -s fallback/tests -t .   # Python fallback tests
 
 ## License
 
-[MIT](LICENSE)
+Released under the [MIT License](https://github.com/vankhangfet/ai-credential-guard/blob/main/LICENSE) — see the [LICENSE](LICENSE) file in the [repository](https://github.com/vankhangfet/ai-credential-guard).
