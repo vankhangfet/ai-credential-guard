@@ -89,3 +89,26 @@ describe("check-file stdin payload (Codex apply_patch)", () => {
     expect(await runCli(["check-file", "--root", root, "--tool", "codex"], payload)).toBe(2);
   });
 });
+
+describe("check-file stdin payload (copilot CLI camelCase + kiro nested shapes)", () => {
+  it("payload camelCase toolArgs (copilot CLI preToolUse, object form) có filePath .env -> exit 2", async () => {
+    const payload = JSON.stringify({ toolName: "read", toolArgs: { filePath: join(root, ".env") }, cwd: root });
+    expect(await runCli(["check-file", "--root", root, "--tool", "copilot"], payload)).toBe(2);
+  });
+  it("payload toolArgs dạng JSON string -> parse được và chặn .env", async () => {
+    const payload = JSON.stringify({ toolName: "read", toolArgs: JSON.stringify({ file_path: join(root, ".env") }), cwd: root });
+    expect(await runCli(["check-file", "--root", root, "--tool", "copilot"], payload)).toBe(2);
+  });
+  it("payload lồng data.file_path (kiro shape) -> exit 2", async () => {
+    const payload = JSON.stringify({ data: { file_path: join(root, ".env") } });
+    expect(await runCli(["check-file", "--root", root, "--tool", "kiro"], payload)).toBe(2);
+  });
+  it("payload lồng triggerData.filePath -> exit 2", async () => {
+    const payload = JSON.stringify({ triggerData: { filePath: join(root, ".env") } });
+    expect(await runCli(["check-file", "--root", root, "--tool", "kiro"], payload)).toBe(2);
+  });
+  it("toolArgs không phải object/string JSON (số) -> bỏ qua, exit 0", async () => {
+    const payload = JSON.stringify({ toolName: "bash", toolArgs: 42 });
+    expect(await runCli(["check-file", "--root", root, "--tool", "copilot"], payload)).toBe(0);
+  });
+});
