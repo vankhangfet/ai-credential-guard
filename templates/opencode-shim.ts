@@ -3,18 +3,25 @@
 //   tool.execute.before: (input: { tool, sessionID, callID }, output: { args }) — throw blocks the call.
 //   chat.message: (input: { sessionID, ... }, output: { message: UserMessage, parts: Part[] }) —
 //     UserMessage has NO nested parts; text lives in sibling output.parts[] as { type: "text", text }.
+//     Throw KHÔNG chặn được (silently caught — anomalyco/opencode#30434): block = mutate
+//     output.parts in place (text parts -> block notice) để secret không tới model.
 // Runs under Bun (OpenCode bundles it) — node:child_process is supported.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 
-// Fast-path: cài local qua `npm i -D ai-credential-guard` — chạy process.execPath (binary node/bun đang
-// chạy shim) với resolved cli.js: nhanh hơn npx ~20x (verifier đo npx --no-install ~6s/call trên
-// Windows, node dist/cli.js ~300ms) và hoạt động trên MỌI platform (kể cả win32 — không cần
-// .cmd, không cần shell). Fallback npx chỉ khi project chưa có local install: win32 spawn không
-// tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true (guard() quote
-// sẵn args — xem dưới); posix giữ bare npx như cũ.
+// Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
+// `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
+// npx ~6s/call (Windows). Fix: check tên MỚI trước (project + parent), giữ tên cũ làm
+// legacy fallback cho install từ trước lúc rename. Fallback npx chỉ khi không có local
+// install: win32 spawn không tìm được `npx` (batch script) khi tách args -> phải dùng
+// npx.cmd + shell:true (guard() quote sẵn args — xem dưới); posix giữ bare npx.
 function resolveCmd(): { cmd: string; prefix: string[] } {
-  for (const p of ["node_modules/ai-guard/dist/cli.js", "../node_modules/ai-guard/dist/cli.js"]) {
+  for (const p of [
+    "node_modules/ai-credential-guard/dist/cli.js",
+    "../node_modules/ai-credential-guard/dist/cli.js",
+    "node_modules/ai-guard/dist/cli.js",
+    "../node_modules/ai-guard/dist/cli.js",
+  ]) {
     if (existsSync(p)) return { cmd: process.execPath, prefix: [p] };
   }
   return process.platform === "win32"
@@ -80,12 +87,28 @@ export const AiGuardOpenCode = async () => ({
     }
   },
   // Fires when a new (user) message is received. Extract text parts from output.parts.
-  // lưu ý: docs chỉ chứng minh throw chặn được tool.execute.before; nếu chat.message throw không abort được thì prompt-side là best-effort
+  // HẠNG MỎNG: throw trong chat.message bị OpenCode silently catch (anomalyco/opencode#30434,
+  // closed not-planned) — KHÔNG chặn được message. Giải pháp thật (community-confirmed):
+  // mutate output.parts in place — thay text của MỌI text part bằng block notice -> secret
+  // KHÔNG bao giờ tới model (model nhận notice thay vì credential). Fail-open: nếu shape
+  // parts đổi (không còn mảng text parts) thì chỉ log, message đi qua như cũ.
   "chat.message": async (_input: any, output: any) => {
-    const text: string = (Array.isArray(output?.parts) ? output.parts : [])
+    const parts: any[] = Array.isArray(output?.parts) ? output.parts : [];
+    const text: string = parts
       .filter((p: any) => p?.type === "text" && typeof p.text === "string")
       .map((p: any) => p.text)
       .join("\n");
-    if (text.trim()) guard(["check-prompt", "--tool", "opencode"], text);
+    if (!text.trim()) return;
+    try {
+      guard(["check-prompt", "--tool", "opencode"], text);
+    } catch (blocked) {
+      const notice =
+        "ai-guard: BLOCKED — credential detected in prompt; text replaced before reaching the model. " +
+        String((blocked as Error)?.message ?? "");
+      for (const p of parts) {
+        if (p?.type === "text") p.text = notice;
+      }
+      console.error(notice);
+    }
   },
 });

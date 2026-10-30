@@ -9,13 +9,18 @@ describe("opencode adapter", () => {
     expect(opencodeAdapter.detect(mkproject({ opencode: true }))).toBe(true);
     expect(opencodeAdapter.detect(mkproject({}))).toBe(false);
   });
-  it("install tạo shim plugin chứa marker + spawn check-file/check-prompt, idempotent", () => {
+  it("install tạo shim plugin chứa marker + spawn check-file/check-prompt + fast-path đúng tên package + parts-mutation, idempotent", () => {
     const root = mkproject({ opencode: true });
     expect(opencodeAdapter.install(root, { instructions: false }).ok).toBe(true);
     opencodeAdapter.install(root, { instructions: false });
     const shim = readFileSync(join(root, ".opencode", "plugins", "ai-guard.ts"), "utf8");
     expect(shim).toContain("ai-guard check-file");
     expect(shim).toContain("ai-guard check-prompt");
+    // fast-path: package tên ai-credential-guard (bug <=1.1.0 check sai node_modules/ai-guard)
+    expect(shim).toContain("node_modules/ai-credential-guard/dist/cli.js");
+    // prompt-side: parts-mutation (chat.message throw bị silently caught — anomalyco/opencode#30434)
+    expect(shim).toContain("output.parts");
+    expect(shim).toContain("opencode#30434");
   });
   it("install với instructions -> AGENTS.md có marker section", () => {
     const root = mkproject({ opencode: true });
