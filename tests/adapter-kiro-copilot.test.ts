@@ -20,7 +20,7 @@ const KIRO_STEERING = join(".kiro", "steering", "security.md");
 const COPILOT_HOOK = join(".github", "hooks", "ai-guard.json");
 const COPILOT_INSTR = join(".github", "copilot-instructions.md");
 
-describe("kiro adapter (prompt-blocking hook + best-effort tool hook + steering education)", () => {
+describe("kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.116) + steering education)", () => {
   it("detect .kiro dir", () => {
     expect(kiroAdapter.detect(mkproject({ kiro: true }))).toBe(true);
     expect(kiroAdapter.detect(mkproject({}))).toBe(false);
@@ -29,7 +29,7 @@ describe("kiro adapter (prompt-blocking hook + best-effort tool hook + steering 
     const root = mkproject({ kiro: true });
     const r = kiroAdapter.install(root, { instructions: true });
     expect(r.ok).toBe(true);
-    expect(r.detail).toContain("best-effort");
+    expect(r.detail).toContain("1.0.116");
     expect(r.detail).toContain("UserPromptSubmit");
     const hook = JSON.parse(readFileSync(join(root, KIRO_HOOK), "utf8"));
     expect(hook.version).toBe("v1");
@@ -73,12 +73,12 @@ describe("kiro adapter (prompt-blocking hook + best-effort tool hook + steering 
     const root = mkproject({ kiro: true });
     const before = kiroAdapter.doctor(root);
     expect(before.ok).toBe(false);
-    expect(before.detail).toContain("best-effort");
+    expect(before.detail).toContain("1.0.116");
     kiroAdapter.install(root, { instructions: false });
     const after = kiroAdapter.doctor(root);
     expect(after.ok).toBe(true);
     expect(after.detail).toContain("prompt");
-    expect(after.detail).toContain("best-effort");
+    expect(after.detail).toContain("1.0.116");
     expect(after.detail).toContain("kirodotdev/Kiro#7500");
     // Fix 3 (coordinator): doctor nêu trạng thái steering (ok-logic không đổi)
     expect(after.detail).toContain("missing steering");
