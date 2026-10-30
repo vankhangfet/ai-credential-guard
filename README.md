@@ -68,7 +68,7 @@ Bypass windows range from 1 to 1440 minutes, and **every bypass is recorded** in
 | Cline | ✅ | ✅ | macOS/Linux; enable *Features → Hooks* |
 | Pi | ⚠️ | ✅ | prompt blocking is best-effort |
 | Kiro | ✅ | ✅ | tool-side needs IDE ≥ 1.0.116 ([#7500](https://github.com/kirodotdev/Kiro/issues/7500) fixed); use ≥ 1.0.293 ([#10346](https://github.com/kirodotdev/Kiro/issues/10346) prompt regression fixed) |
-| GitHub Copilot (VS Code + CLI) | ⚠️ | ✅ | prompts: warn-only — Copilot hooks cannot block a submitted prompt (platform limit); file reads blocked via `.github/hooks` (`version: 1`); VS Code agent mode needs `chat.useHooks` |
+| GitHub Copilot (VS Code + CLI) | ⚠️ | ✅ | prompts: warn-only — Copilot hooks cannot block a submitted prompt (platform limit); file reads blocked via `.github/hooks` (`version: 1`); VS Code agent mode reads hooks (`chat.useHooks`, on by default in current VS Code) |
 
 ---
 
@@ -80,7 +80,7 @@ Everything lives in the `.ai-guard/` folder of your project:
 |---|---|
 | `rules.json` | add your own token formats (`add`), change a rule's severity (`override`), or disable a rule (`remove`). Reusing a built-in rule id replaces it. |
 | `config.json` | add more sensitive file paths |
-| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`). Actions: `blocked`, `warned` (heuristic or warn-only prompt — detected, not blocked), `allowed_after_confirm` |
+| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`). Actions: `blocked`, `warned` (heuristic or warn-only prompt — detected, not blocked), `allowed_after_confirm`, `bypass_granted` (logged when you run `allow`) |
 
 > ⚠️ A demo rule `example-internal` (matches `CORP-*`) is enabled by default — edit or remove it.
 
@@ -135,7 +135,7 @@ Copy the `fallback/` folder to the target machine and run the installer as above
 | `doctor` | Check the engine, rules and all registered hooks. |
 | `allow prompt --Nm` | Allow prompts for N minutes (audited). |
 | `allow file <path> --Nm` | Allow reading a file for N minutes (audited). |
-| `check-prompt` | Scan a prompt from stdin. Exit code `2` = blocked. |
+| `check-prompt` | Scan a prompt from stdin. Exit code `2` = blocked. Options: `--warn-only` — warn + audit `warned` instead of blocking (for platforms that can't block prompts). |
 | `check-file <path>` | Check a path against sensitive-file rules. Exit code `2` = blocked. |
 | `self-test` | Run the built-in test fixtures against the engine. |
 | `uninstall [--purge]` | Remove hooks. `--purge` also deletes `.ai-guard/` including logs. |

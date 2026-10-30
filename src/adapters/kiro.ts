@@ -143,7 +143,7 @@ export const kiroAdapter: AdapterBase = {
     }
     return {
       ok: true,
-      detail: `hooks registered (prompt + tool; ${TOOL_SIDE_NOTE}; prompt-side needs IDE >= 1.0.293 (#10346 fixed))${steeringNote}`,
+      detail: `hooks registered (prompt + tool; ${TOOL_SIDE_NOTE}; prompt-side: use IDE >= 1.0.293 (#10346 regression fixed))${steeringNote}`,
     };
   },
 };

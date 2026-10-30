@@ -79,6 +79,7 @@ describe("kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.11
     expect(after.ok).toBe(true);
     expect(after.detail).toContain("prompt");
     expect(after.detail).toContain("1.0.116");
+    expect(after.detail).toContain("1.0.293");
     expect(after.detail).toContain("kirodotdev/Kiro#7500");
     // Fix 3 (coordinator): doctor nêu trạng thái steering (ok-logic không đổi)
     expect(after.detail).toContain("missing steering");
