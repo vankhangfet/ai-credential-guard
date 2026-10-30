@@ -87,6 +87,8 @@ describe("opencode shim (thực thi — lock parts-mutation + fast-path contract
     expect(threw).toBe(false);
     expect(parts[0].text).toContain("ai-guard: BLOCKED");
     expect(parts[0].text).not.toContain("IOSFODNN7EXAMPLE");
+    expect(parts[0].text).not.toContain("preview"); // notice generic — không đưa preview (kể cả masked) vào model
+    expect(parts[0].text).not.toContain("allow prompt"); // không đưa lệnh bypass vào model
     expect(parts[1].text).toContain("ai-guard: BLOCKED");
     expect(JSON.stringify(parts[2])).toBe(JSON.stringify({ type: "image", url: "x" }));
   });
@@ -120,5 +122,6 @@ describe("opencode shim (thực thi — lock parts-mutation + fast-path contract
     } catch (e) { err = e; } finally { process.chdir(cwd); }
     expect(err).toBeTruthy();
     expect(String(err?.message ?? "")).toContain("ai-guard");
+    expect((err as any).blocked).toBe(true); // chat.message phân biệt block thật vs bug qua tag này
   });
 });
