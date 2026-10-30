@@ -177,4 +177,32 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     copilotAdapter.install(root, { instructions: true });
     expect(copilotAdapter.doctor(root).ok).toBe(true);
   });
+  it("doctor: prompt entry thiếu --warn-only -> not ok (tránh false 'blocked' telemetry)", () => {
+    const root = mkproject({ vscode: true });
+    mkdirSync(join(root, ".github", "hooks"), { recursive: true });
+    writeFileSync(join(root, COPILOT_HOOK), JSON.stringify(
+      {
+        version: 1,
+        hooks: {
+          PreToolUse: [{ type: "command", command: "npx --no-install ai-guard check-file --tool copilot" }],
+          userPromptSubmitted: [{ type: "command", command: "npx --no-install ai-guard check-prompt --tool copilot" }],
+        },
+      },
+      null,
+      2,
+    ) + "\n");
+    const d = copilotAdapter.doctor(root);
+    expect(d.ok).toBe(false);
+    expect(d.detail).toContain("re-run install");
+    copilotAdapter.install(root, { instructions: true });
+    expect(copilotAdapter.doctor(root).ok).toBe(true);
+  });
+  it("doctor: hook file JSON hỏng (có marker) -> not ok, re-run install", () => {
+    const root = mkproject({ vscode: true });
+    mkdirSync(join(root, ".github", "hooks"), { recursive: true });
+    writeFileSync(join(root, COPILOT_HOOK), '{ "ai-guard": tru'); // chứa "ai-guard" (marker) nhưng không parse được
+    const d = copilotAdapter.doctor(root);
+    expect(d.ok).toBe(false);
+    expect(d.detail).toContain("re-run install");
+  });
 });

@@ -121,7 +121,7 @@ export const copilotAdapter: AdapterBase = {
     let hookOk = false;
     let hookDetail: string;
     if (!existsSync(hookPath)) {
-      hookDetail = "no hook";
+      hookDetail = "no hook — re-run install";
     } else if (!readFileSync(hookPath, "utf8").includes(MARKER)) {
       hookDetail = "hook file does not belong to ai-guard";
     } else {
@@ -138,7 +138,7 @@ export const copilotAdapter: AdapterBase = {
           (h) => typeof h?.command === "string" && h.command.includes(cmdPart),
         );
       const blocking = hasEntry("PreToolUse", "check-file --tool copilot");
-      const warnOnly = hasEntry("userPromptSubmitted", "check-prompt --tool copilot");
+      const warnOnly = hasEntry("userPromptSubmitted", "check-prompt --tool copilot --warn-only");
       if (version === 1 && blocking && warnOnly) {
         hookOk = true;
         hookDetail = "hooks installed (PreToolUse blocks file reads; userPromptSubmitted warns — cannot block prompts, platform limit)";
