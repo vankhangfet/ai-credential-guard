@@ -10,19 +10,24 @@ const { spawnSync } = require("node:child_process");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-// Fast-path: cài local qua `npm i -D ai-credential-guard` — chạy process.execPath (binary node đang chạy
-// hook) với resolved cli.js: nhanh hơn npx ~20x và hoạt động trên MỌI platform (kể cả win32 —
-// không cần .cmd, không cần shell). Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ
-// __dirname/../.. (cwd-independent) + cwd. Fallback npx chỉ khi chưa có local install: win32
-// spawn không tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true
+// Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
+// `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
+// npx ~6s/call (Windows). Fix: check tên MỚI trước (__dirname/../.. + cwd), giữ tên cũ làm
+// legacy fallback cho alias install (package chưa từng publish dưới tên ai-guard). Chạy process.execPath (binary node đang
+// chạy hook) với resolved cli.js: nhanh hơn npx ~20x và hoạt động trên MỌI platform (kể cả
+// win32 — không cần .cmd, không cần shell). Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ
+// __dirname/../.. (cwd-independent) + cwd. (hook chạy qua shebang node -> execPath luôn là
+// node runtime, không cần guard). Fallback npx chỉ khi chưa có local install: win32 spawn
+// không tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true
 // (guard() quote sẵn args — xem dưới); posix giữ bare npx như cũ.
 function resolveCmd() {
+  // Ưu tiên theo BASE trước (gần hook nhất thắng), trong mỗi base tên MỚI trước tên cũ.
   for (const base of [join(__dirname, "..", ".."), process.cwd()]) {
-    for (const p of [
-      join(base, "node_modules", "ai-guard", "dist", "cli.js"),
-      join(base, "..", "node_modules", "ai-guard", "dist", "cli.js"),
-    ]) {
-      if (existsSync(p)) return { cmd: process.execPath, prefix: [p] };
+    for (const name of ["ai-credential-guard", "ai-guard"]) {
+      for (const rel of [join("node_modules", name, "dist", "cli.js"), join("..", "node_modules", name, "dist", "cli.js")]) {
+        const p = join(base, rel);
+        if (existsSync(p)) return { cmd: process.execPath, prefix: [p] };
+      }
     }
   }
   return process.platform === "win32"

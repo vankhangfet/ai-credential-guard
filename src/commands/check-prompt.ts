@@ -12,8 +12,10 @@ export function extractPrompt(input: string): string | null {
     try {
       const j = JSON.parse(s);
       // Alias keys mở rộng cho Kiro UserPromptSubmit (user-verified: prompt text findable
-      // dưới prompt|userPrompt|message|text|input|content) — mirror fallback/engine.py.
-      const p = [j?.prompt, j?.input, j?.message, j?.text, j?.userPrompt, j?.content].find((v) => typeof v === "string");
+      // dưới prompt|userPrompt|message|text|input|content, và lồng data.prompt|triggerData.prompt
+      // cho shape kiro #10346) — SUPERSET của fallback/engine.py: nested shape của Kiro chỉ có
+      // ở TS vì fallback chỉ phục vụ Claude Code/Codex.
+      const p = [j?.prompt, j?.input, j?.message, j?.text, j?.userPrompt, j?.content, j?.data?.prompt, j?.triggerData?.prompt].find((v) => typeof v === "string");
       // JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng field name lạ) ->
       // fall-through quét RAW: prompt/secret vẫn nằm nguyên văn trong JSON text (fallback
       // alias-miss của cline UserPromptSubmit shim truyền nguyên raw stdin).
@@ -27,6 +29,7 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   const rootArg = flagValue(argv, "--root");
   const root = rootArg !== undefined ? rootArg : process.cwd();
   const tool = flagValue(argv, "--tool") ?? "unknown";
+  const warnOnly = argv.includes("--warn-only"); // boolean flag — dùng includes, KHÔNG flagValue (flagValue lấy value của flag kế tiếp)
   const prompt = extractPrompt(input);
   if (!prompt) return 0;
   const projectRoot = findProjectRoot(root);
@@ -46,15 +49,21 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
     appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: "allowed_after_confirm", rule: blocks[0].ruleId, preview: blocks[0].preview, count: blocks.length });
     return 0;
   }
-  appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: "blocked", rule: blocks[0].ruleId, preview: blocks[0].preview, count: blocks.length });
+  appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: warnOnly ? "warned" : "blocked", rule: blocks[0].ruleId, preview: blocks[0].preview, count: blocks.length });
   const lines = [
-    "ai-guard: BLOCKED — credential detected in prompt (not sent to AI).",
+    warnOnly
+      ? "ai-guard: WARNING — credential detected in prompt. This tool cannot block prompts (platform limit): the text may still be sent to the model."
+      : "ai-guard: BLOCKED — credential detected in prompt (not sent to AI).",
     ...blocks.slice(0, 5).map((f) => `  • ${f.ruleId}: ${f.description} [preview: ${f.preview}]`),
   ];
   if (blocks.length > 5) lines.push(`  • ... and ${blocks.length - 5} more findings`);
-  lines.push("If you INTENTIONALLY want to send this, run the following then resubmit:");
-  lines.push("  npx ai-guard allow prompt --5m");
-  lines.push("(The next submission within the window will be recorded in the audit log.)");
+  lines.push(
+    warnOnly
+      ? "To silence this warning for intentional sends, run the following then resubmit:"
+      : "If you INTENTIONALLY want to send this, run the following then resubmit:",
+    "  npx ai-guard allow prompt --5m",
+    "(The next submission within the window will be recorded in the audit log.)",
+  );
   process.stderr.write(lines.join("\n") + "\n");
   return 2;
 }

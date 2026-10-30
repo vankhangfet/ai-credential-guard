@@ -447,10 +447,12 @@ def flag_value(argv: list, flag: str):
 def extract_prompt(input_text: str):
     """JSON alias fields (prompt/input/message/text/userPrompt/content) -> else RAW.
 
-    Alias keys mirror src/commands/check-prompt.ts — thêm userPrompt/content cho
-    Kiro UserPromptSubmit (user-verified: prompt text findable dưới 1 trong các
-    key đó). JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng
-    field name lạ) -> quét raw: secret vẫn nằm nguyên văn trong JSON text.
+    Alias keys theo src/commands/check-prompt.ts nhưng là SUBSET (TS là superset:
+    nested data.prompt|triggerData.prompt của Kiro chỉ có ở TS vì fallback này chỉ
+    phục vụ Claude Code/Codex) — thêm userPrompt/content cho Kiro UserPromptSubmit
+    (user-verified: prompt text findable dưới 1 trong các key đó). JSON hợp lệ nhưng
+    KHÔNG alias field nào là string (hook payload dùng field name lạ) -> quét raw:
+    secret vẫn nằm nguyên văn trong JSON text.
     """
     s = input_text.strip()
     if not s:

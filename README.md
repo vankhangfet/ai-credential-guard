@@ -3,15 +3,15 @@
 [![npm version](https://img.shields.io/npm/v/ai-credential-guard)](https://www.npmjs.com/package/ai-credential-guard)
 [![npm downloads](https://img.shields.io/npm/dt/ai-credential-guard)](https://www.npmjs.com/package/ai-credential-guard)
 [![CI](https://github.com/vankhangfet/ai-credential-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/vankhangfet/ai-credential-guard/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/vankhangfet/ai-credential-guard/blob/main/LICENSE)
 
 **Stop secrets from leaking to AI models while you code.**
 
 `ai-credential-guard` hooks into your AI coding tools and blocks API keys, passwords, private keys and connection strings **before** they are sent to the model — whether you paste them into a prompt or the agent tries to read a file like `.env`.
 
-Works with **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, and GitHub Copilot (VS Code)**.
+Works with **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, and GitHub Copilot (VS Code + CLI)**.
 
-> npm package: `ai-credential-guard` · CLI command: `ai-guard`
+> npm package: [ai-credential-guard](https://www.npmjs.com/package/ai-credential-guard) · GitHub: [vankhangfet/ai-credential-guard](https://github.com/vankhangfet/ai-credential-guard) · CLI command: `ai-guard` · License: [MIT](https://github.com/vankhangfet/ai-credential-guard/blob/main/LICENSE)
 
 ---
 
@@ -64,11 +64,11 @@ Bypass windows range from 1 to 1440 minutes, and **every bypass is recorded** in
 |---|:---:|:---:|---|
 | Claude Code | ✅ | ✅ | |
 | Codex CLI | ✅ | ✅ | |
-| OpenCode | ✅ | ✅ | via plugin `.opencode/plugins/ai-guard.ts` |
+| OpenCode | ✅ | ✅ | via plugin `.opencode/plugins/ai-guard.ts`; prompt side strips the secret from text parts before the model sees it (secrets split across parts or embedded in non-text parts can still pass) |
 | Cline | ✅ | ✅ | macOS/Linux; enable *Features → Hooks* |
 | Pi | ⚠️ | ✅ | prompt blocking is best-effort |
-| Kiro | ✅ | ⚠️ | prompt hook verified; tool-side best-effort ([Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500)) |
-| GitHub Copilot (VS Code) | ❌ | ✅ | chat input can't be intercepted (platform limit); requires `chat.useHooks` |
+| Kiro | ✅ | ✅ | tool-side needs IDE ≥ 1.0.116 ([#7500](https://github.com/kirodotdev/Kiro/issues/7500) fixed); use ≥ 1.0.293 ([#10346](https://github.com/kirodotdev/Kiro/issues/10346) prompt regression fixed) |
+| GitHub Copilot (VS Code + CLI) | ⚠️ | ✅ | prompts: warn-only — Copilot hooks cannot block a submitted prompt (platform limit); file reads blocked via `.github/hooks` (`version: 1`); VS Code agent mode loads repo hooks via the shared Copilot runtime (Preview; `chat.useHooks` gates the legacy Local harness only); repo hooks load in interactive Copilot CLI sessions only ([#3345](https://github.com/github/copilot-cli/issues/3345)) |
 
 ---
 
@@ -80,7 +80,7 @@ Everything lives in the `.ai-guard/` folder of your project:
 |---|---|
 | `rules.json` | add your own token formats (`add`), change a rule's severity (`override`), or disable a rule (`remove`). Reusing a built-in rule id replaces it. |
 | `config.json` | add more sensitive file paths |
-| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`) |
+| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`). Actions: `blocked`, `warned` (heuristic or warn-only prompt — detected, not blocked), `allowed_after_confirm`, `bypass_granted` (logged when you run `allow`) |
 
 > ⚠️ A demo rule `example-internal` (matches `CORP-*`) is enabled by default — edit or remove it.
 
@@ -135,7 +135,7 @@ Copy the `fallback/` folder to the target machine and run the installer as above
 | `doctor` | Check the engine, rules and all registered hooks. |
 | `allow prompt --Nm` | Allow prompts for N minutes (audited). |
 | `allow file <path> --Nm` | Allow reading a file for N minutes (audited). |
-| `check-prompt` | Scan a prompt from stdin. Exit code `2` = blocked. |
+| `check-prompt` | Scan a prompt from stdin. Exit code `2` = blocked. Options: `--warn-only` — warn + audit `warned` instead of blocking (for platforms that can't block prompts) (still exits 2 so the host surfaces the warning). |
 | `check-file <path>` | Check a path against sensitive-file rules. Exit code `2` = blocked. |
 | `self-test` | Run the built-in test fixtures against the engine. |
 | `uninstall [--purge]` | Remove hooks. `--purge` also deletes `.ai-guard/` including logs. |
@@ -158,4 +158,4 @@ python -m unittest discover -s fallback/tests -t .   # Python fallback tests
 
 ## License
 
-[MIT](LICENSE)
+Released under the [MIT License](https://github.com/vankhangfet/ai-credential-guard/blob/main/LICENSE) — see the [LICENSE](LICENSE) file in the [repository](https://github.com/vankhangfet/ai-credential-guard).

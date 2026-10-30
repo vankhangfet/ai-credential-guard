@@ -27,10 +27,24 @@ function extractPathCandidates(argv: string[], input: string): string[] {
   try {
     const j = JSON.parse(s);
     // v1: tool_input.path là thư mục (Grep/Glob base) chỉ chặn nếu chính tên thư mục match pattern; không liệt kê file con
-    const ti = j?.tool_input ?? {};
-    const p = [ti.file_path, ti.notebook_path, ti.path, j?.path].find((v) => typeof v === "string");
+    // Containers theo thứ tự ưu tiên: tool_input (snake/PascalCase payload — Claude/VS Code/
+    // copilot PreToolUse), toolArgs (camelCase payload — copilot CLI preToolUse, kiểu
+    // "unknown": object hoặc JSON string), data/triggerData (kiro session-context shapes).
+    // String container được JSON.parse thử; parse fail hoặc non-object -> bỏ qua container đó.
+    const containers = [j?.tool_input, j?.toolArgs, j?.data, j?.triggerData]
+      .map((c) => {
+        if (typeof c === "string") {
+          try { return JSON.parse(c); } catch { return undefined; }
+        }
+        return c;
+      })
+      .filter((c): c is Record<string, unknown> => c !== null && typeof c === "object" && !Array.isArray(c));
+    const p = containers
+      .flatMap((c) => [c.file_path, c.notebook_path, c.filePath, c.path])
+      .find((v) => typeof v === "string") ?? (typeof j?.path === "string" ? j.path : undefined);
     if (typeof p === "string") return [p];
     // không có path tường minh — thu thập TẤT CẢ patch header (first-sensitive-wins ở caller)
+    const ti = j?.tool_input ?? {};
     const out: string[] = [];
     for (const key of ["input", "command", "patch"]) {
       const v = ti[key] ?? j?.[key];

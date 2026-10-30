@@ -64,7 +64,7 @@ describe("cline adapter", () => {
 });
 
 // Fix C (ride-along từ review Task 21): vitest THỰC THI template qua node thật để lock cancel
-// contract giữa template và engine. Template fast-path spawn `node_modules/ai-guard/dist/cli.js`
+// contract giữa template và engine. Template fast-path spawn tên MỚI `node_modules/ai-credential-guard/dist/cli.js` trước (tên cũ `ai-guard` là legacy fallback)
 // nên test copy dist ĐÃ BUILD của repo vào tmp project — CẦN `npm run build` trước; dist thiếu
 // (CI chưa build) -> skip toàn bộ (it.skipIf).
 const DIST_CLI = join(__dirname, "..", "dist", "cli.js");
@@ -74,7 +74,7 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
   function mkExecProject(): string {
     const root = mkproject({ cline: true }); // .ai-guard sẵn -> engine chặn được
     clineAdapter.install(root, { instructions: false });
-    cpSync(DIST_DIR, join(root, "node_modules", "ai-guard", "dist"), { recursive: true });
+    cpSync(DIST_DIR, join(root, "node_modules", "ai-credential-guard", "dist"), { recursive: true });
     return root;
   }
   it.skipIf(!existsSync(DIST_CLI))("PreToolUse payload .env -> stdout {\"cancel\":true}", () => {
@@ -99,6 +99,19 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
     const r = spawnSync(process.execPath, [join(root, PRE)], { input: payload, encoding: "utf8", timeout: 30_000 });
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
+  });
+  it.skipIf(!existsSync(DIST_CLI))("fast-path legacy: dist dưới tên cũ ai-guard vẫn resolve (backward compat)", () => {
+    const root = mkproject({ cline: true });
+    clineAdapter.install(root, { instructions: false });
+    cpSync(DIST_DIR, join(root, "node_modules", "ai-guard", "dist"), { recursive: true });
+    const payload = JSON.stringify({
+      tool_name: "read_file",
+      tool_input: { path: join(root, ".env") },
+      workspaceRoots: [root],
+    });
+    const r = spawnSync(process.execPath, [join(root, PRE)], { input: payload, encoding: "utf8", timeout: 30_000 });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('"cancel":true');
   });
   it.skipIf(!existsSync(DIST_CLI))("UserPromptSubmit alias-miss (Fix B): secret trong RAW JSON vẫn bị chặn", () => {
     const root = mkExecProject();
@@ -127,7 +140,7 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
       env[pathKey] = stubDir + ";" + (env[pathKey] ?? "");
       env.AIG_STUB_LOG = logFile;
 
-      // tmp project KHÔNG có node_modules/ai-guard (bỏ qua mkExecProject) -> fallback npx.cmd.
+      // tmp project KHÔNG có local install dưới cả hai tên (bỏ qua mkExecProject) -> fallback npx.cmd.
       const root = mkproject({ cline: true });
       clineAdapter.install(root, { instructions: false });
 

@@ -4,7 +4,7 @@ import type { AdapterBase, InstallOptions, InstallResult } from "./types";
 import { MARKER } from "../util/json-config";
 import { appendMarkedSection, templatePath } from "./hooks-json";
 
-// Kiro — prompt-blocking hook (user-verified) + best-effort tool hook + education layer (steering).
+// Kiro — prompt-blocking hook (user-verified) + tool-blocking hook (IDE >= 1.0.116) + education layer (steering).
 // Step 0 verified (kiro.dev/docs/hooks): hooks là các JSON file trong `.kiro/hooks/`, schema
 // { version: "v1", hooks: [{ name, description?, trigger (PascalCase, vd "PreToolUse"),
 // matcher? (regex khớp tool name), action: { type: "command" | "agent", command | prompt },
@@ -12,16 +12,16 @@ import { appendMarkedSection, templatePath } from "./hooks-json";
 // USER-VERIFIED (hand test trên Kiro thật): trigger "UserPromptSubmit" + action command
 // WORKS — payload stdin có prompt text (findable dưới alias keys prompt|userPrompt|message|
 // text|input|content — xem extractPrompt) và exit 2 BLOCKS prompt trước khi tới model.
-// GIỚI HẠN ĐÃ XÁC NHẬN (github.com/kirodotdev/Kiro#7500): runCommand hooks trong Kiro IDE
-// KHÔNG nhận tool_name/tool_input (stdin rỗng, không env) — chỉ Kiro CLI truyền payload đầy
-// đủ. CLI check-file không thấy path -> exit 0 (fail-open). Vậy CHỈ tool-side (PreToolUse)
-// là best-effort; steering (.kiro/steering/*.md, được Kiro nạp vào agent context) vẫn là
-// lớp education chính. Install/doctor detail nêu rõ best-effort cho tool side.
+// ĐÃ FIX UPSTREAM (github.com/kirodotdev/Kiro#7500): resolved ở Kiro IDE v1.0.116
+// (Jul 2026) (fix confirmed in-thread; issue still open) — PreToolUse command hooks NHẬN tool payload (stdin có tool context),
+// exit 2 chặn tool call. IDE cũ hơn (< 1.0.116) truyền stdin rỗng -> check-file
+// không thấy path -> exit 0 (fail-open). Prompt-side: regression #10346 (UserPromptSubmit
+// nhận prompt rỗng ở 1.0.138–1.0.242) fixed ở 1.0.293 — khuyên dùng IDE >= 1.0.293.
 const HOOK_REL = join(".kiro", "hooks", "ai-guard.json");
 const STEERING_REL = join(".kiro", "steering", "security.md");
 
 // Bỏ `matcher` (optional): matcher khớp tool name mà tên tool của Kiro chưa được docs cố định —
-// không matcher = fires trên MỌI tool use, phủ widest cho best-effort.
+// không matcher = fires trên MỌI tool use, phủ widest cho mọi tool.
 const HOOK_BODY =
   JSON.stringify(
     {
@@ -36,7 +36,7 @@ const HOOK_BODY =
         },
         {
           name: "ai-guard-check-file",
-          description: "ai-guard (best-effort): block credential reads — IDE payload may lack tool_input (kirodotdev/Kiro#7500)",
+          description: "ai-guard: block credential file reads — exit 2 blocks the tool call (IDE >= 1.0.116; older IDEs fail open, see kirodotdev/Kiro#7500)",
           trigger: "PreToolUse",
           action: { type: "command", command: "npx --no-install ai-guard check-file --tool kiro" },
           timeout: 30,
@@ -47,8 +47,8 @@ const HOOK_BODY =
     2,
   ) + "\n";
 
-// Chỉ tool side (PreToolUse/check-file) là best-effort; prompt side (UserPromptSubmit) chặn thật.
-const TOOL_BEST_EFFORT = "tool side best-effort — IDE payload may lack tool_input (kirodotdev/Kiro#7500)";
+// Tool side chặn THẬT trên IDE >= 1.0.116 (#7500 fixed); IDE cũ fail-open (stdin rỗng).
+const TOOL_SIDE_NOTE = "tool-side blocking works on IDE >= 1.0.116 (kirodotdev/Kiro#7500 fixed); older IDEs pass an empty payload (fail-open)";
 
 export const kiroAdapter: AdapterBase = {
   id: "kiro",
@@ -82,7 +82,7 @@ export const kiroAdapter: AdapterBase = {
       return {
         adapter: "kiro",
         ok: true,
-        detail: `hooks UserPromptSubmit (prompt, user-verified) + PreToolUse (${TOOL_BEST_EFFORT}) at ${HOOK_REL} + education layer ${STEERING_REL}`,
+        detail: `hooks UserPromptSubmit (prompt, user-verified) + PreToolUse (${TOOL_SIDE_NOTE}) at ${HOOK_REL} + education layer ${STEERING_REL}`,
       };
     } catch (e) {
       return { adapter: "kiro", ok: false, detail: String(e) };
@@ -110,11 +110,11 @@ export const kiroAdapter: AdapterBase = {
   doctor(root: string) {
     const hookPath = join(root, HOOK_REL);
     if (!existsSync(hookPath)) {
-      return { ok: false, detail: `missing ai-guard hooks: ${HOOK_REL} — expected UserPromptSubmit (prompt) + PreToolUse (${TOOL_BEST_EFFORT})` };
+      return { ok: false, detail: `missing ai-guard hooks: ${HOOK_REL} — expected UserPromptSubmit (prompt) + PreToolUse (${TOOL_SIDE_NOTE})` };
     }
     const raw = readFileSync(hookPath, "utf8");
     if (!raw.includes(MARKER)) {
-      return { ok: false, detail: `${HOOK_REL} exists but does not belong to ai-guard (${TOOL_BEST_EFFORT})` };
+      return { ok: false, detail: `${HOOK_REL} exists but does not belong to ai-guard (${TOOL_SIDE_NOTE})` };
     }
     // Ok đòi hỏi ĐỦ 2 trigger: UserPromptSubmit (check-prompt — prompt blocking) VÀ
     // PreToolUse (check-file — tool side). File cũ chỉ có PreToolUse (<=1.0.x) hoặc
@@ -139,11 +139,11 @@ export const kiroAdapter: AdapterBase = {
       const missing = [!promptHook && "UserPromptSubmit (check-prompt)", !toolHook && "PreToolUse (check-file)"]
         .filter(Boolean)
         .join(" + ");
-      return { ok: false, detail: `${HOOK_REL} outdated — missing ${missing}; re-run install (${TOOL_BEST_EFFORT})` };
+      return { ok: false, detail: `${HOOK_REL} outdated — missing ${missing}; re-run install (${TOOL_SIDE_NOTE})` };
     }
     return {
       ok: true,
-      detail: `hooks registered (prompt + tool; ${TOOL_BEST_EFFORT})${steeringNote}`,
+      detail: `hooks registered (prompt + tool; ${TOOL_SIDE_NOTE}; prompt-side: use IDE >= 1.0.293 (#10346 regression fixed))${steeringNote}`,
     };
   },
 };

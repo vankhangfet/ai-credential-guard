@@ -20,6 +20,9 @@ describe("pi adapter", () => {
     expect(shim).toContain("ai-guard check-file");
     expect(shim).toContain("ai-guard check-prompt");
     expect(shim).toContain("resolveCmd");
+    // fast-path: package tên ai-credential-guard + runtime guard (mirror opencode-shim v3)
+    expect(shim).toContain("ai-credential-guard");
+    expect(shim).toContain("import.meta");
     expect(shim).toContain("timeout");
   });
   it("install với instructions -> AGENTS.md có marker section", () => {

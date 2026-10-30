@@ -1,9 +1,31 @@
 {
   "name": "ai-credential-guard",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Stop secrets from leaking to AI models while you code.",
   "type": "commonjs",
   "license": "MIT",
+  "homepage": "https://github.com/vankhangfet/ai-credential-guard#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/vankhangfet/ai-credential-guard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/vankhangfet/ai-credential-guard/issues"
+  },
+  "keywords": [
+    "security",
+    "secrets",
+    "credentials",
+    "api-keys",
+    "ai",
+    "claude-code",
+    "codex",
+    "copilot",
+    "cline",
+    "kiro",
+    "hooks",
+    "guard"
+  ],
   "bin": {
     "ai-guard": "dist/cli.js"
   },

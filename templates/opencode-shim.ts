@@ -3,19 +3,40 @@
 //   tool.execute.before: (input: { tool, sessionID, callID }, output: { args }) — throw blocks the call.
 //   chat.message: (input: { sessionID, ... }, output: { message: UserMessage, parts: Part[] }) —
 //     UserMessage has NO nested parts; text lives in sibling output.parts[] as { type: "text", text }.
+//     Throw KHÔNG chặn được (silently caught — anomalyco/opencode#30434): block = mutate
+//     output.parts in place (text parts -> block notice) để secret không tới model.
 // Runs under Bun (OpenCode bundles it) — node:child_process is supported.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { basename, join } from "node:path";
 
-// Fast-path: cài local qua `npm i -D ai-credential-guard` — chạy process.execPath (binary node/bun đang
-// chạy shim) với resolved cli.js: nhanh hơn npx ~20x (verifier đo npx --no-install ~6s/call trên
-// Windows, node dist/cli.js ~300ms) và hoạt động trên MỌI platform (kể cả win32 — không cần
-// .cmd, không cần shell). Fallback npx chỉ khi project chưa có local install: win32 spawn không
-// tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true (guard() quote
-// sẵn args — xem dưới); posix giữ bare npx như cũ.
+// Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
+// `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
+// npx ~6s/call (Windows). Fix: check tên MỚI trước (plugin-dir + cwd), giữ tên cũ làm legacy
+// fallback cho alias install (package chưa từng publish dưới tên ai-guard).
+// GIỚI HẠN runtime (Bun compiled executable): OpenCode phát hành dạng single binary — trong
+// compiled exe, process.execPath trỏ về CHÍNH binary OpenCode, KHÔNG phải node/bun runtime:
+// spawn nó với cli.js là unknown command -> fail-open (hoặc treo tới timeout). Chỉ dùng
+// fast-path khi basename(execPath) là JS runtime (node|bun|deno); nếu không, thử
+// Bun.which("node"|"bun") (plugin chạy trong process có Bun global); còn lại npx fallback.
+// Base ưu tiên import.meta.dir (thư mục plugin <proj>/.opencode/plugins — cwd-independent),
+// fallback process.cwd() (hành vi cũ).
 function resolveCmd(): { cmd: string; prefix: string[] } {
-  for (const p of ["node_modules/ai-guard/dist/cli.js", "../node_modules/ai-guard/dist/cli.js"]) {
-    if (existsSync(p)) return { cmd: process.execPath, prefix: [p] };
+  let runtime: string | undefined = /node|bun|deno/i.test(basename(process.execPath)) ? process.execPath : undefined;
+  if (!runtime) {
+    const bun = (globalThis as any).Bun;
+    if (bun?.which) runtime = bun.which("node") ?? bun.which("bun") ?? undefined;
+  }
+  const pluginDir = (import.meta as any).dir; // Bun/vitest: dir của file này; plain node ESM: undefined
+  const bases = [typeof pluginDir === "string" ? join(pluginDir, "..", "..") : "", process.cwd()];
+  if (runtime) {
+    for (const base of bases) {
+      if (!base) continue;
+      for (const name of ["ai-credential-guard", "ai-guard"]) {
+        const p = join(base, "node_modules", name, "dist", "cli.js");
+        if (existsSync(p)) return { cmd: runtime, prefix: [p] };
+      }
+    }
   }
   return process.platform === "win32"
     ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"] }
@@ -55,7 +76,11 @@ function guard(args: string[], input?: string): void {
     console.error("ai-guard: engine failed to run (" + r.error.message + ") — SKIPPING check (fail-open)");
     return;
   }
-  if (r.status === 2) throw new Error((r.stderr || "ai-guard: blocked").trim());
+  if (r.status === 2) {
+    const e = new Error((r.stderr || "ai-guard: blocked").trim()) as Error & { blocked: boolean };
+    e.blocked = true; // chat.message phân biệt block THẬT vs bug trong guard (fail-open)
+    throw e;
+  }
   if (r.status !== 0) {
     // engine crash / resolution fail — fail-open nhưng PHẢI thấy được
     console.error("ai-guard: engine exited " + r.status + " — " + (r.stderr || "").trim());
@@ -80,12 +105,38 @@ export const AiGuardOpenCode = async () => ({
     }
   },
   // Fires when a new (user) message is received. Extract text parts from output.parts.
-  // lưu ý: docs chỉ chứng minh throw chặn được tool.execute.before; nếu chat.message throw không abort được thì prompt-side là best-effort
+  // HẠNG MỎNG: throw trong chat.message bị OpenCode silently catch (anomalyco/opencode#30434,
+  // closed not-planned) — KHÔNG chặn được message. Giải pháp thật (community-confirmed):
+  // mutate output.parts in place — thay text của MỌI text part bằng block notice -> secret
+  // KHÔNG bao giờ tới model (model nhận notice thay vì credential). Notice tới model phải
+  // GENERIC: không preview (kể cả masked — mảnh secret không nên tới model), KHÔNG kèm lệnh
+  // bypass (tránh agent tự mở khóa theo hướng dẫn trong notice); chi tiết đầy đủ (rule +
+  // preview masked + lệnh allow) chỉ console.error cho NGƯỜI. Bug bất ngờ trong guard ->
+  // log + fail-open (không thay message của user bằng noise). Shape parts đổi (không còn
+  // mảng text parts) -> bỏ qua, message đi qua như cũ.
   "chat.message": async (_input: any, output: any) => {
-    const text: string = (Array.isArray(output?.parts) ? output.parts : [])
+    const parts: any[] = Array.isArray(output?.parts) ? output.parts : [];
+    const text: string = parts
       .filter((p: any) => p?.type === "text" && typeof p.text === "string")
       .map((p: any) => p.text)
       .join("\n");
-    if (text.trim()) guard(["check-prompt", "--tool", "opencode"], text);
+    if (!text.trim()) return;
+    try {
+      guard(["check-prompt", "--tool", "opencode"], text);
+    } catch (blocked) {
+      if (!(blocked as any)?.blocked) {
+        // bug bất ngờ trong guard — KHÔNG thay message của user bằng noise; fail-open có tiếng vọng
+        console.error("ai-guard: guard error (fail-open) — " + String((blocked as Error)?.message ?? blocked));
+        return;
+      }
+      // Notice tới MODEL phải GENERIC: không preview (dù masked — mảnh secret không nên tới
+      // model) và KHÔNG kèm lệnh bypass (tránh agent tự mở khóa theo hướng dẫn trong notice).
+      // Chi tiết đầy đủ (rule + preview masked + lệnh allow) chỉ ra console.error cho NGƯỜI.
+      const notice = "ai-guard: BLOCKED — credential detected in prompt; text removed before reaching the model.";
+      for (const p of parts) {
+        if (p?.type === "text" && typeof p.text === "string") p.text = notice;
+      }
+      console.error(notice + "\n" + String((blocked as Error)?.message ?? ""));
+    }
   },
 });

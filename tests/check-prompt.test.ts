@@ -63,6 +63,38 @@ describe("check-prompt", () => {
   it("payload key content (kiro UserPromptSubmit alias) -> extract + block", async () => {
     expect(await runCli(["check-prompt", "--root", root], JSON.stringify({ content: "x ghp_" + "a".repeat(36) }))).toBe(2);
   });
+  it("payload lồng data.prompt (kiro #10346 shape) -> extract + block", async () => {
+    expect(
+      await runCli(["check-prompt", "--root", root], JSON.stringify({ data: { prompt: "AKIAIOSFODNN7EXAMPLE" } })),
+    ).toBe(2);
+  });
+  it("payload lồng triggerData.prompt (kiro #10346 shape) -> extract + block", async () => {
+    expect(
+      await runCli(["check-prompt", "--root", root], JSON.stringify({ triggerData: { prompt: "AKIAIOSFODNN7EXAMPLE" } })),
+    ).toBe(2);
+  });
+  it("--warn-only: block findings -> vẫn exit 2 nhưng action 'warned' + stderr nêu không chặn được", async () => {
+    const errSpy = process.stderr.write.bind(process.stderr);
+    let captured = "";
+    (process.stderr as any).write = (s: string) => { captured += s; return true; };
+    let code: number;
+    try {
+      code = await runCli(["check-prompt", "--root", root, "--warn-only"], stdinOf(root, "dùng key AKIAIOSFODNN7EXAMPLE giúp tôi"));
+    } finally {
+      (process.stderr as any).write = errSpy;
+    }
+    expect(code).toBe(2);
+    expect(lastEvent().action).toBe("warned");
+    expect(lastEvent().rule).toBe("aws-access-key");
+    expect(captured).toContain("aws-access-key");
+    expect(captured).toContain("cannot block");
+  });
+  it("--warn-only + bypass hợp lệ -> exit 0 + allowed_after_confirm (không warn spam)", async () => {
+    grantBypass(root, "prompt", undefined, 5);
+    const code = await runCli(["check-prompt", "--root", root, "--warn-only"], stdinOf(root, "dùng key AKIAIOSFODNN7EXAMPLE giúp tôi"));
+    expect(code).toBe(0);
+    expect(lastEvent().action).toBe("allowed_after_confirm");
+  });
   it("warn + block -> 2 events đúng thứ tự (warned rồi blocked)", async () => {
     const code = await runCli(["check-prompt", "--root", root], stdinOf(root, "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U và AKIAIOSFODNN7EXAMPLE"));
     expect(code).toBe(2);
