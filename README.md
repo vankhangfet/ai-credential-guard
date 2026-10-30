@@ -9,7 +9,7 @@
 
 `ai-credential-guard` hooks into your AI coding tools and blocks API keys, passwords, private keys and connection strings **before** they are sent to the model — whether you paste them into a prompt or the agent tries to read a file like `.env`.
 
-Works with **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, and GitHub Copilot (VS Code)**.
+Works with **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, and GitHub Copilot (VS Code + CLI)**.
 
 > npm package: [ai-credential-guard](https://www.npmjs.com/package/ai-credential-guard) · GitHub: [vankhangfet/ai-credential-guard](https://github.com/vankhangfet/ai-credential-guard) · CLI command: `ai-guard` · License: [MIT](https://github.com/vankhangfet/ai-credential-guard/blob/main/LICENSE)
 
