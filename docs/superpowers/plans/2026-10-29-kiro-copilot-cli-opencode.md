@@ -18,7 +18,7 @@
 - Modify: `src/commands/check-prompt.ts`
 - Test: `tests/check-prompt.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append inside `describe("check-prompt", ...)` in `tests/check-prompt.test.ts` (after the `payload key content` test):
 
@@ -57,12 +57,12 @@ Append inside `describe("check-prompt", ...)` in `tests/check-prompt.test.ts` (a
   });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/check-prompt.test.ts`
 Expected: FAIL — the nested-alias tests exit 0 (secret not extracted → no block); `--warn-only` tests fail on `action` being `"blocked"` and stderr missing "cannot block".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/commands/check-prompt.ts`:
 
@@ -102,12 +102,12 @@ In `src/commands/check-prompt.ts`:
 
 Leave the `hasValidBypass` branch above untouched (bypass suppresses both modes — already covered by the new test).
 
-- [ ] **Step 4: Run the full file**
+- [x] **Step 4: Run the full file**
 
 Run: `npx vitest run tests/check-prompt.test.ts`
 Expected: PASS (all existing + 4 new tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/commands/check-prompt.ts tests/check-prompt.test.ts
@@ -124,7 +124,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/commands/check-file.ts` (extractPathCandidates, lines ~17-48)
 - Test: `tests/check-file.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Append a new describe block at the end of `tests/check-file.test.ts`:
 
@@ -153,12 +153,12 @@ describe("check-file stdin payload (copilot CLI camelCase + kiro nested shapes)"
 });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/check-file.test.ts`
 Expected: FAIL — first four tests exit 0 (aliases not read yet).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/commands/check-file.ts`, replace the direct-field lookup block (lines ~30-32):
 
@@ -191,12 +191,12 @@ with:
 
 (Keep the patch-header scan that follows unchanged — it only runs when no explicit path was found.)
 
-- [ ] **Step 4: Run the full file**
+- [x] **Step 4: Run the full file**
 
 Run: `npx vitest run tests/check-file.test.ts`
 Expected: PASS (existing Claude Code payload tests + 5 new tests).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/commands/check-file.ts tests/check-file.test.ts
@@ -213,7 +213,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/adapters/copilot.ts`
 - Test: `tests/adapter-kiro-copilot.test.ts` (copilot describe block, lines ~108-158)
 
-- [ ] **Step 1: Update the tests**
+- [x] **Step 1: Update the tests**
 
 Replace the copilot describe block's install test and doctor test in `tests/adapter-kiro-copilot.test.ts`:
 
@@ -269,12 +269,12 @@ Replace the doctor test with:
   });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/adapter-kiro-copilot.test.ts`
 Expected: FAIL — install test fails on `hook.version` / `userPromptSubmitted`; new doctor-legacy test fails (old doctor returns ok=true on legacy file).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/adapters/copilot.ts`:
 
@@ -377,12 +377,12 @@ const HOOK_BODY =
 
 3e. Change the adapter `label` (line ~39) to `"GitHub Copilot (VS Code + CLI)"`.
 
-- [ ] **Step 4: Run the full file**
+- [x] **Step 4: Run the full file**
 
 Run: `npx vitest run tests/adapter-kiro-copilot.test.ts`
 Expected: PASS — kiro block unchanged, copilot block green (install/idempotent/no-instructions/uninstall/doctor/doctor-legacy).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/adapters/copilot.ts tests/adapter-kiro-copilot.test.ts
@@ -399,7 +399,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/adapters/kiro.ts`
 - Test: `tests/adapter-kiro-copilot.test.ts` (kiro describe block, lines ~23-106)
 
-- [ ] **Step 1: Update the tests**
+- [x] **Step 1: Update the tests**
 
 In `tests/adapter-kiro-copilot.test.ts`, kiro describe block:
 
@@ -437,12 +437,12 @@ with:
 
 1c. Update the describe title (line 23) to `"kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.116) + steering education)"`.
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/adapter-kiro-copilot.test.ts`
 Expected: FAIL — detail strings still say "best-effort".
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `src/adapters/kiro.ts`:
 
@@ -473,12 +473,12 @@ const TOOL_SIDE_NOTE = "tool-side blocking works on IDE >= 1.0.116 (kirodotdev/K
           description: "ai-guard: block credential file reads — exit 2 blocks the tool call (IDE >= 1.0.116; older IDEs fail open, see kirodotdev/Kiro#7500)",
 ```
 
-- [ ] **Step 4: Run the full file**
+- [x] **Step 4: Run the full file**
 
 Run: `npx vitest run tests/adapter-kiro-copilot.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/adapters/kiro.ts tests/adapter-kiro-copilot.test.ts
@@ -495,7 +495,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `templates/opencode-shim.ts`
 - Test: `tests/adapter-opencode.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Replace the first install test in `tests/adapter-opencode.test.ts` (lines ~12-19) with:
 
@@ -515,12 +515,12 @@ Replace the first install test in `tests/adapter-opencode.test.ts` (lines ~12-19
   });
 ```
 
-- [ ] **Step 2: Run to verify it fails**
+- [x] **Step 2: Run to verify it fails**
 
 Run: `npx vitest run tests/adapter-opencode.test.ts`
 Expected: FAIL on the two new assertions (template still checks `node_modules/ai-guard` and has no parts-mutation).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 In `templates/opencode-shim.ts`:
 
@@ -587,12 +587,12 @@ function resolveCmd(): { cmd: string; prefix: string[] } {
 //     output.parts in place (text parts -> block notice) để secret không tới model.
 ```
 
-- [ ] **Step 4: Run the full file**
+- [x] **Step 4: Run the full file**
 
 Run: `npx vitest run tests/adapter-opencode.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add templates/opencode-shim.ts tests/adapter-opencode.test.ts
@@ -611,7 +611,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `templates/cline-hook-userpromptsubmit.js` (same resolveCmd block)
 - Test: `tests/adapter-pi.test.ts`, `tests/adapter-cline.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 1a. In `tests/adapter-pi.test.ts`, extend the install test's shim assertions (after `expect(shim).toContain("resolveCmd");`):
 
@@ -649,12 +649,12 @@ and add a legacy-path test right after the existing PreToolUse tests:
   });
 ```
 
-- [ ] **Step 2: Run to verify they fail**
+- [x] **Step 2: Run to verify they fail**
 
 Run: `npx vitest run tests/adapter-pi.test.ts tests/adapter-cline.test.ts`
 Expected: pi FAIL on new assertion; cline exec tests FAIL (fast-path can't find dist at the new path — requires `npm run build` first; if dist is missing they skip — run `npm run build` then re-run).
 
-- [ ] **Step 3: Implement**
+- [x] **Step 3: Implement**
 
 3a. `templates/pi-shim.ts` — replace the path list in `resolveCmd` (the `for (const p of [...])` block) with the same 4-entry list as Task 5 (new name project/parent first, then legacy name project/parent).
 
@@ -681,12 +681,12 @@ function resolveCmd() {
 
 3c. Apply the identical `resolveCmd` replacement in `templates/cline-hook-userpromptsubmit.js`.
 
-- [ ] **Step 4: Run the full files**
+- [x] **Step 4: Run the full files**
 
 Run: `npm run build && npx vitest run tests/adapter-pi.test.ts tests/adapter-cline.test.ts`
 Expected: PASS (cline exec tests now resolve dist via the new package path; legacy test passes; npx-fallback test unaffected — its project has no node_modules at all).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add templates/pi-shim.ts templates/cline-hook-pretooluse.js templates/cline-hook-userpromptsubmit.js tests/adapter-pi.test.ts tests/adapter-cline.test.ts

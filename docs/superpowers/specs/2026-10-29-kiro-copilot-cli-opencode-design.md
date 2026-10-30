@@ -106,15 +106,21 @@ CLI V3 format. No file-format change.
 In `templates/opencode-shim.ts`:
 
 - **`chat.message`**: on exit 2, do **not** throw (silently caught upstream —
-  a no-op). Instead mutate `output.parts` in place: every text part's `text` is
-  replaced with the ai-guard block notice (rule id + preview + bypass
-  instructions), so the secret never reaches the LLM. `console.error` prints the
-  standard block message for the user. Wrapped in try/catch: if OpenCode changes
-  the parts shape, we fail open to today's behavior (message passes through,
-  warning printed).
-- **Fast-path fix**: `resolveCmd` checks
-  `node_modules/ai-credential-guard/dist/cli.js` first (project root + parent),
-  then the legacy `node_modules/ai-guard/dist/cli.js`, then the `npx` fallback.
+  a no-op). Instead mutate `output.parts` in place: every string text part's
+  `text` is replaced with a GENERIC block notice (no secret previews — even
+  masked fragments must not reach the model — and no bypass command, so an
+  agent cannot self-serve the unlock from model-visible text), so the secret
+  never reaches the LLM. `console.error` prints the full engine message
+  (masked previews + bypass instructions) for the human. `guard()` tags its
+  throw with `.blocked = true`; the catch mutates only on a real block — any
+  other throw logs and fails open (message passes through, warning printed).
+- **Fast-path fix**: `resolveCmd` checks the published package name
+  `ai-credential-guard` before the legacy `ai-guard` (both at plugin-dir and
+  cwd bases; plugin-dir via `import.meta.dir` is cwd-independent), and only
+  uses `process.execPath` when its basename is a JS runtime (node|bun|deno) —
+  OpenCode ships as a Bun compiled executable where `process.execPath` points
+  at the OpenCode binary itself (spawning it with cli.js would silently
+  fail-open); in that case try `Bun.which("node"|"bun")`, else `npx` fallback.
 - `tool.execute.before` unchanged (officially documented throw-to-block).
 
 The same fast-path fix (new package path first, legacy path kept) is applied to
@@ -127,9 +133,11 @@ The same fast-path fix (new package path first, legacy path kept) is applied to
   alias list, before the raw-text fallback.
 - `extractPathCandidates` (`src/commands/check-file.ts`): in addition to
   `tool_input`, check camelCase `toolArgs` (object or JSON string) and nested
-  `data` / `triggerData` containers; path keys gain `filePath` alongside
-  `file_path`/`notebook_path`/`path`/`file`. First match wins; ordering and
-  existing semantics (argv positional wins; patch-header scan last) unchanged.
+  `data` / `triggerData` containers (keys read directly under each container);
+  path keys gain `filePath` alongside the existing `file_path`/`notebook_path`/
+  `path` (a bare `file` key is deliberately NOT added — too generic,
+  false-positive-prone). First match wins; ordering and existing semantics
+  (argv positional wins; patch-header scan last) unchanged.
 
 ## 5. Tests
 
@@ -138,7 +146,10 @@ The same fast-path fix (new package path first, legacy path kept) is applied to
   (no-version / prompt-entry-missing) files as outdated; kiro doctor wording
   reflects the upgraded capability.
 - `tests/adapter-opencode.test.ts`: installed shim contains the
-  `ai-credential-guard` fast-path and the parts-mutation block; doctor unchanged.
+  `ai-credential-guard` fast-path and the parts-mutation block; plus functional
+  tests (skipIf dist missing, cline-precedent) executing the real template:
+  secret prompt mutates all text parts (secret absent, no throw), clean prompt
+  passes through, `.env` tool call throws.
 - `tests/adapter-cline.test.ts` / `tests/adapter-pi.test.ts`: fast-path tests
   create `node_modules/ai-credential-guard/dist/cli.js` (and one legacy-path
   case) instead of `node_modules/ai-guard/...`.
