@@ -705,7 +705,7 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 - Modify: `src/cli.ts:10` (version string)
 - Modify: `package-lock.json` (via npm)
 
-- [ ] **Step 1: Update README**
+- [x] **Step 1: Update README**
 
 1a. Supported tools table — replace the Kiro row:
 
@@ -721,18 +721,18 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 1c. In the *Configuration* section's audit-log table row, after `review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`)`, append: `. Actions: `blocked`, `warned` (heuristic or warn-only prompt — detected, not blocked), `allowed_after_confirm``.
 
-- [ ] **Step 2: Bump version**
+- [x] **Step 2: Bump version**
 
 In `package.json` change `"version": "1.1.0"` → `"version": "1.2.0"`.
 In `src/cli.ts` line 10 change `console.log("ai-guard 1.1.0");` → `console.log("ai-guard 1.2.0");`
 Run: `npm install --package-lock-only` (refreshes lockfile version fields).
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `npx vitest run` then `npm run build && node dist/cli.js version`
 Expected: full suite PASS; build succeeds; prints `ai-guard 1.2.0`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add README.md package.json package-lock.json src/cli.ts
@@ -745,12 +745,12 @@ Co-Authored-By: Claude Code <noreply@anthropic.com>"
 
 ### Task 8: Final verification
 
-- [ ] **Step 1: Full suite + build + smoke**
+- [x] **Step 1: Full suite + build + smoke**
 
 Run: `npm test && npm run build && node dist/cli.js self-test && node dist/cli.js version`
 Expected: all tests PASS, build OK, self-test 0 failures, version `1.2.0`.
 
-- [ ] **Step 2: Smoke the new engine behavior end-to-end**
+- [x] **Step 2: Smoke the new engine behavior end-to-end**
 
 ```bash
 cd "$(mktemp -d)" && mkdir .ai-guard && echo '{"add":[],"override":{},"remove":[]}' > .ai-guard/rules.json
@@ -759,7 +759,7 @@ echo '{"prompt":"use AKIAIOSFODNN7EXAMPLE please","tool":"copilot"}' | node <rep
 
 Expected: stderr shows the `cannot block` warning, `exit=2`.
 
-- [ ] **Step 3: Report hand-verification drill to user**
+- [x] **Step 3: Report hand-verification drill to user**
 
 Remind the user of the four hand-verification steps from the spec (Kiro ≥ 1.0.293 prompt+file, Copilot CLI file-denial + prompt-warning, VS Code Copilot file-block incl. `version: 1` acceptance, OpenCode prompt-strip + file-block) — release (`npm publish`) only after their sign-off.
 
