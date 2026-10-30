@@ -64,7 +64,7 @@ describe("cline adapter", () => {
 });
 
 // Fix C (ride-along từ review Task 21): vitest THỰC THI template qua node thật để lock cancel
-// contract giữa template và engine. Template fast-path spawn `node_modules/ai-guard/dist/cli.js`
+// contract giữa template và engine. Template fast-path spawn tên MỚI `node_modules/ai-credential-guard/dist/cli.js` trước (tên cũ `ai-guard` là legacy fallback)
 // nên test copy dist ĐÃ BUILD của repo vào tmp project — CẦN `npm run build` trước; dist thiếu
 // (CI chưa build) -> skip toàn bộ (it.skipIf).
 const DIST_CLI = join(__dirname, "..", "dist", "cli.js");
@@ -140,7 +140,7 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
       env[pathKey] = stubDir + ";" + (env[pathKey] ?? "");
       env.AIG_STUB_LOG = logFile;
 
-      // tmp project KHÔNG có node_modules/ai-guard (bỏ qua mkExecProject) -> fallback npx.cmd.
+      // tmp project KHÔNG có local install dưới cả hai tên (bỏ qua mkExecProject) -> fallback npx.cmd.
       const root = mkproject({ cline: true });
       clineAdapter.install(root, { instructions: false });
 

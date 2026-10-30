@@ -10,8 +10,8 @@ import { copilotAdapter } from "../src/adapters/copilot";
 //    { version: "v1", hooks: [{ name, trigger, action: { type: "command", command } }] }.
 //    USER-VERIFIED: trigger "UserPromptSubmit" + command action WORKS — stdin payload có
 //    prompt text (alias keys prompt|userPrompt|message|text|input|content) và exit 2
-//    BLOCKS prompt. GIỚI HẠN (kirodotdev/Kiro#7500): IDE runCommand hooks KHÔNG nhận
-//    tool_input -> PreToolUse/check-file là best-effort (tool side only).
+//    BLOCKS prompt. ĐÃ FIX (kirodotdev/Kiro#7500): từ IDE >= 1.0.116 PreToolUse command
+//    hooks NHẬN tool_input -> exit 2 chặn THẬT tool call (tool side); IDE cũ hơn fail-open.
 //  - Copilot/VS Code (code.visualstudio.com/docs/agent-customization/hooks): project-level hooks
 //    tồn tại — `.github/hooks/*.json` (Local harness, chat.useHooks ON mặc định), PreToolUse stdin
 //    có tool_input, exit 2 = block. Chat/prompt-side KHÔNG chặn được -> education layer chính.
@@ -69,7 +69,7 @@ describe("kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.11
     expect(existsSync(join(root, KIRO_HOOK))).toBe(false);
     expect(existsSync(join(root, KIRO_STEERING))).toBe(true);
   });
-  it("doctor: trước install fail; sau install ok — detail nêu prompt + best-effort tool side", () => {
+  it("doctor: trước install fail; sau install ok — detail nêu prompt + tool side (1.0.116)", () => {
     const root = mkproject({ kiro: true });
     const before = kiroAdapter.doctor(root);
     expect(before.ok).toBe(false);

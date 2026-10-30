@@ -13,7 +13,7 @@ const { join } = require("node:path");
 // Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
 // `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
 // npx ~6s/call (Windows). Fix: check tên MỚI trước (__dirname/../.. + cwd), giữ tên cũ làm
-// legacy fallback cho install từ trước lúc rename. Chạy process.execPath (binary node đang
+// legacy fallback cho alias install (package chưa từng publish dưới tên ai-guard). Chạy process.execPath (binary node đang
 // chạy hook) với resolved cli.js: nhanh hơn npx ~20x và hoạt động trên MỌI platform (kể cả
 // win32 — không cần .cmd, không cần shell). Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ
 // __dirname/../.. (cwd-independent) + cwd. (hook chạy qua shebang node -> execPath luôn là
@@ -21,6 +21,7 @@ const { join } = require("node:path");
 // không tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true
 // (guard() quote sẵn args — xem dưới); posix giữ bare npx như cũ.
 function resolveCmd() {
+  // Ưu tiên theo BASE trước (gần hook nhất thắng), trong mỗi base tên MỚI trước tên cũ.
   for (const base of [join(__dirname, "..", ".."), process.cwd()]) {
     for (const name of ["ai-credential-guard", "ai-guard"]) {
       for (const rel of [join("node_modules", name, "dist", "cli.js"), join("..", "node_modules", name, "dist", "cli.js")]) {

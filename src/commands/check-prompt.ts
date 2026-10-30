@@ -13,7 +13,8 @@ export function extractPrompt(input: string): string | null {
       const j = JSON.parse(s);
       // Alias keys mở rộng cho Kiro UserPromptSubmit (user-verified: prompt text findable
       // dưới prompt|userPrompt|message|text|input|content, và lồng data.prompt|triggerData.prompt
-      // cho shape kiro #10346) — mirror fallback/engine.py.
+      // cho shape kiro #10346) — SUPERSET của fallback/engine.py: nested shape của Kiro chỉ có
+      // ở TS vì fallback chỉ phục vụ Claude Code/Codex.
       const p = [j?.prompt, j?.input, j?.message, j?.text, j?.userPrompt, j?.content, j?.data?.prompt, j?.triggerData?.prompt].find((v) => typeof v === "string");
       // JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng field name lạ) ->
       // fall-through quét RAW: prompt/secret vẫn nằm nguyên văn trong JSON text (fallback

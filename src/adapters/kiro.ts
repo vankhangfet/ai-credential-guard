@@ -4,7 +4,7 @@ import type { AdapterBase, InstallOptions, InstallResult } from "./types";
 import { MARKER } from "../util/json-config";
 import { appendMarkedSection, templatePath } from "./hooks-json";
 
-// Kiro — prompt-blocking hook (user-verified) + best-effort tool hook + education layer (steering).
+// Kiro — prompt-blocking hook (user-verified) + tool-blocking hook (IDE >= 1.0.116) + education layer (steering).
 // Step 0 verified (kiro.dev/docs/hooks): hooks là các JSON file trong `.kiro/hooks/`, schema
 // { version: "v1", hooks: [{ name, description?, trigger (PascalCase, vd "PreToolUse"),
 // matcher? (regex khớp tool name), action: { type: "command" | "agent", command | prompt },
@@ -13,7 +13,7 @@ import { appendMarkedSection, templatePath } from "./hooks-json";
 // WORKS — payload stdin có prompt text (findable dưới alias keys prompt|userPrompt|message|
 // text|input|content — xem extractPrompt) và exit 2 BLOCKS prompt trước khi tới model.
 // ĐÃ FIX UPSTREAM (github.com/kirodotdev/Kiro#7500): resolved ở Kiro IDE v1.0.116
-// (Jul 2026) — PreToolUse command hooks NHẬN tool payload (stdin có tool context),
+// (Jul 2026) (fix confirmed in-thread; issue still open) — PreToolUse command hooks NHẬN tool payload (stdin có tool context),
 // exit 2 chặn tool call. IDE cũ hơn (< 1.0.116) truyền stdin rỗng -> check-file
 // không thấy path -> exit 0 (fail-open). Prompt-side: regression #10346 (UserPromptSubmit
 // nhận prompt rỗng ở 1.0.138–1.0.242) fixed ở 1.0.293 — khuyên dùng IDE >= 1.0.293.
@@ -21,7 +21,7 @@ const HOOK_REL = join(".kiro", "hooks", "ai-guard.json");
 const STEERING_REL = join(".kiro", "steering", "security.md");
 
 // Bỏ `matcher` (optional): matcher khớp tool name mà tên tool của Kiro chưa được docs cố định —
-// không matcher = fires trên MỌI tool use, phủ widest cho best-effort.
+// không matcher = fires trên MỌI tool use, phủ widest cho mọi tool.
 const HOOK_BODY =
   JSON.stringify(
     {
@@ -143,7 +143,7 @@ export const kiroAdapter: AdapterBase = {
     }
     return {
       ok: true,
-      detail: `hooks registered (prompt + tool; ${TOOL_SIDE_NOTE})${steeringNote}`,
+      detail: `hooks registered (prompt + tool; ${TOOL_SIDE_NOTE}; prompt-side needs IDE >= 1.0.293 (#10346 fixed))${steeringNote}`,
     };
   },
 };

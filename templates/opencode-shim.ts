@@ -13,7 +13,7 @@ import { basename, join } from "node:path";
 // Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
 // `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
 // npx ~6s/call (Windows). Fix: check tên MỚI trước (plugin-dir + cwd), giữ tên cũ làm legacy
-// fallback cho install từ trước lúc rename.
+// fallback cho alias install (package chưa từng publish dưới tên ai-guard).
 // GIỚI HẠN runtime (Bun compiled executable): OpenCode phát hành dạng single binary — trong
 // compiled exe, process.execPath trỏ về CHÍNH binary OpenCode, KHÔNG phải node/bun runtime:
 // spawn nó với cli.js là unknown command -> fail-open (hoặc treo tới timeout). Chỉ dùng

@@ -16,7 +16,8 @@ import { basename, join } from "node:path";
 // Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
 // `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
 // npx ~6s/call (Windows). Fix: check tên MỚI trước (plugin-dir + cwd), giữ tên cũ làm legacy
-// fallback cho install từ trước lúc rename.
+// fallback cho alias install (package chưa từng publish dưới tên ai-guard).
+// LƯU Ý base: plugin-dir base chỉ live dưới Bun (opencode); dưới jiti loader của pi (import.meta.dir undefined) base đó inert — cwd base mới là base hiệu dụng.
 // Runtime guard (mirror opencode-shim v3): chỉ dùng process.execPath khi basename là JS runtime
 // (node|bun|deno) — tránh trường hợp host là compiled executable (execPath trỏ về chính nó);
 // khi đó thử Bun.which, còn lại npx fallback.

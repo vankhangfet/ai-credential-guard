@@ -64,11 +64,11 @@ Bypass windows range from 1 to 1440 minutes, and **every bypass is recorded** in
 |---|:---:|:---:|---|
 | Claude Code | ✅ | ✅ | |
 | Codex CLI | ✅ | ✅ | |
-| OpenCode | ✅ | ✅ | via plugin `.opencode/plugins/ai-guard.ts` |
+| OpenCode | ✅ | ✅ | via plugin `.opencode/plugins/ai-guard.ts`; prompt side strips the secret from text parts before the model sees it (secrets split across parts or embedded in non-text parts can still pass) |
 | Cline | ✅ | ✅ | macOS/Linux; enable *Features → Hooks* |
 | Pi | ⚠️ | ✅ | prompt blocking is best-effort |
-| Kiro | ✅ | ⚠️ | prompt hook verified; tool-side best-effort ([Kiro#7500](https://github.com/kirodotdev/Kiro/issues/7500)) |
-| GitHub Copilot (VS Code) | ❌ | ✅ | chat input can't be intercepted (platform limit); requires `chat.useHooks` |
+| Kiro | ✅ | ✅ | tool-side needs IDE ≥ 1.0.116 ([#7500](https://github.com/kirodotdev/Kiro/issues/7500) fixed); use ≥ 1.0.293 ([#10346](https://github.com/kirodotdev/Kiro/issues/10346) prompt regression fixed) |
+| GitHub Copilot (VS Code + CLI) | ⚠️ | ✅ | prompts: warn-only — Copilot hooks cannot block a submitted prompt (platform limit); file reads blocked via `.github/hooks` (`version: 1`); VS Code agent mode needs `chat.useHooks` |
 
 ---
 
@@ -80,7 +80,7 @@ Everything lives in the `.ai-guard/` folder of your project:
 |---|---|
 | `rules.json` | add your own token formats (`add`), change a rule's severity (`override`), or disable a rule (`remove`). Reusing a built-in rule id replaces it. |
 | `config.json` | add more sensitive file paths |
-| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`) |
+| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`). Actions: `blocked`, `warned` (heuristic or warn-only prompt — detected, not blocked), `allowed_after_confirm` |
 
 > ⚠️ A demo rule `example-internal` (matches `CORP-*`) is enabled by default — edit or remove it.
 
