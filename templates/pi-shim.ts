@@ -11,16 +11,31 @@
 // Runs under Bun/node (Pi loads TS directly) — node:child_process is supported.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
+import { basename, join } from "node:path";
 
-// Fast-path: cài local qua `npm i -D ai-credential-guard` — chạy process.execPath (binary node/bun đang
-// chạy shim) với resolved cli.js: nhanh hơn npx ~20x (verifier đo npx --no-install ~6s/call trên
-// Windows, node dist/cli.js ~300ms) và hoạt động trên MỌI platform (kể cả win32 — không cần
-// .cmd, không cần shell). Fallback npx chỉ khi project chưa có local install: win32 spawn không
-// tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true (guard() quote
-// sẵn args — xem dưới); posix giữ bare npx như cũ.
+// Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
+// `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
+// npx ~6s/call (Windows). Fix: check tên MỚI trước (plugin-dir + cwd), giữ tên cũ làm legacy
+// fallback cho install từ trước lúc rename.
+// Runtime guard (mirror opencode-shim v3): chỉ dùng process.execPath khi basename là JS runtime
+// (node|bun|deno) — tránh trường hợp host là compiled executable (execPath trỏ về chính nó);
+// khi đó thử Bun.which, còn lại npx fallback.
 function resolveCmd(): { cmd: string; prefix: string[] } {
-  for (const p of ["node_modules/ai-guard/dist/cli.js", "../node_modules/ai-guard/dist/cli.js"]) {
-    if (existsSync(p)) return { cmd: process.execPath, prefix: [p] };
+  let runtime: string | undefined = /node|bun|deno/i.test(basename(process.execPath)) ? process.execPath : undefined;
+  if (!runtime) {
+    const bun = (globalThis as any).Bun;
+    if (bun?.which) runtime = bun.which("node") ?? bun.which("bun") ?? undefined;
+  }
+  const pluginDir = (import.meta as any).dir; // Bun/vitest: dir của file này; plain node ESM: undefined
+  const bases = [typeof pluginDir === "string" ? join(pluginDir, "..", "..") : "", process.cwd()];
+  if (runtime) {
+    for (const base of bases) {
+      if (!base) continue;
+      for (const name of ["ai-credential-guard", "ai-guard"]) {
+        const p = join(base, "node_modules", name, "dist", "cli.js");
+        if (existsSync(p)) return { cmd: runtime, prefix: [p] };
+      }
+    }
   }
   return process.platform === "win32"
     ? { cmd: "npx.cmd", prefix: ["--no-install", "ai-guard"] }

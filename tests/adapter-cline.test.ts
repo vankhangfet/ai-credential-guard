@@ -74,7 +74,7 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
   function mkExecProject(): string {
     const root = mkproject({ cline: true }); // .ai-guard sẵn -> engine chặn được
     clineAdapter.install(root, { instructions: false });
-    cpSync(DIST_DIR, join(root, "node_modules", "ai-guard", "dist"), { recursive: true });
+    cpSync(DIST_DIR, join(root, "node_modules", "ai-credential-guard", "dist"), { recursive: true });
     return root;
   }
   it.skipIf(!existsSync(DIST_CLI))("PreToolUse payload .env -> stdout {\"cancel\":true}", () => {
@@ -99,6 +99,19 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
     const r = spawnSync(process.execPath, [join(root, PRE)], { input: payload, encoding: "utf8", timeout: 30_000 });
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
+  });
+  it.skipIf(!existsSync(DIST_CLI))("fast-path legacy: dist dưới tên cũ ai-guard vẫn resolve (backward compat)", () => {
+    const root = mkproject({ cline: true });
+    clineAdapter.install(root, { instructions: false });
+    cpSync(DIST_DIR, join(root, "node_modules", "ai-guard", "dist"), { recursive: true });
+    const payload = JSON.stringify({
+      tool_name: "read_file",
+      tool_input: { path: join(root, ".env") },
+      workspaceRoots: [root],
+    });
+    const r = spawnSync(process.execPath, [join(root, PRE)], { input: payload, encoding: "utf8", timeout: 30_000 });
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain('"cancel":true');
   });
   it.skipIf(!existsSync(DIST_CLI))("UserPromptSubmit alias-miss (Fix B): secret trong RAW JSON vẫn bị chặn", () => {
     const root = mkExecProject();
