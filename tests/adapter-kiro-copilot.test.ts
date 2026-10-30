@@ -13,7 +13,7 @@ import { copilotAdapter } from "../src/adapters/copilot";
 //    BLOCKS prompt. ĐÃ FIX (kirodotdev/Kiro#7500): từ IDE >= 1.0.116 PreToolUse command
 //    hooks NHẬN tool_input -> exit 2 chặn THẬT tool call (tool side); IDE cũ hơn fail-open.
 //  - Copilot/VS Code (code.visualstudio.com/docs/agent-customization/hooks): project-level hooks
-//    tồn tại — `.github/hooks/*.json` (Local harness, chat.useHooks ON mặc định), PreToolUse stdin
+//    tồn tại — `.github/hooks/*.json` (Local harness, chat.useHooks chỉ gates legacy Local harness; repo .github/hooks do shared Copilot runtime nạp), PreToolUse stdin
 //    có tool_input, exit 2 = block. Chat/prompt-side KHÔNG chặn được -> education layer chính.
 const KIRO_HOOK = join(".kiro", "hooks", "ai-guard.json");
 const KIRO_STEERING = join(".kiro", "steering", "security.md");
