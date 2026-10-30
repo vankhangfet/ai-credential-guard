@@ -44,7 +44,13 @@ const HOOK_BODY =
 export const copilotAdapter: AdapterBase = {
   id: "copilot",
   label: "GitHub Copilot (VS Code + CLI)",
-  detect: (root) => existsSync(join(root, ".vscode")),
+  // Copilot CLI project có thể KHÔNG có .vscode — detect thêm qua artifact của chính ta
+  // (hook file có marker / instructions có section), nếu không doctor báo "No adapters
+  // detected" gây hiểu lầm hook chưa cài trên đúng nhóm user mới (CLI-only).
+  detect: (root) =>
+    existsSync(join(root, ".vscode")) ||
+    (existsSync(join(root, HOOK_REL)) && readFileSync(join(root, HOOK_REL), "utf8").includes(MARKER)) ||
+    (existsSync(join(root, INSTR_REL)) && readFileSync(join(root, INSTR_REL), "utf8").includes(SECTION_MARKER)),
   install(root: string, opts: InstallOptions): InstallResult {
     try {
       // Atomic install: kiểm tra slot hook + tính education TRƯỚC khi mutate file nào.

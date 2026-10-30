@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mkproject } from "./util/mkproject";
 import { kiroAdapter } from "../src/adapters/kiro";
@@ -205,5 +205,18 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     const d = copilotAdapter.doctor(root);
     expect(d.ok).toBe(false);
     expect(d.detail).toContain("re-run install");
+  });
+  it("detect: Copilot CLI only (không .vscode) — detect qua artifact, doctor xanh sau install", () => {
+    const root = mkproject({}); // KHÔNG có .vscode
+    expect(copilotAdapter.detect(root)).toBe(false);
+    expect(copilotAdapter.install(root, { instructions: true }).ok).toBe(true);
+    expect(copilotAdapter.detect(root)).toBe(true);
+    expect(copilotAdapter.doctor(root).ok).toBe(true);
+  });
+  it("detect: chỉ còn instructions artifact (hook đã xóa) -> vẫn true", () => {
+    const root = mkproject({});
+    copilotAdapter.install(root, { instructions: true });
+    rmSync(join(root, COPILOT_HOOK));
+    expect(copilotAdapter.detect(root)).toBe(true);
   });
 });
