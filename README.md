@@ -68,7 +68,7 @@ Bypass windows range from 1 to 1440 minutes, and **every bypass is recorded** in
 | Cline | ✅ | ✅ | macOS/Linux; enable *Features → Hooks* |
 | Pi | ⚠️ | ✅ | prompt blocking is best-effort |
 | Kiro | ✅ | ✅ | tool-side needs IDE ≥ 1.0.116 ([#7500](https://github.com/kirodotdev/Kiro/issues/7500) fixed); use ≥ 1.0.293 ([#10346](https://github.com/kirodotdev/Kiro/issues/10346) prompt regression fixed) |
-| GitHub Copilot (VS Code + CLI) | ⚠️ | ✅ | prompts: warn-only — Copilot hooks cannot block a submitted prompt (platform limit); file reads blocked via `.github/hooks` (`version: 1`); VS Code agent mode loads repo hooks via the shared Copilot runtime (Preview; `chat.useHooks` gates the legacy Local harness only) |
+| GitHub Copilot (VS Code + CLI) | ⚠️ | ✅ | prompts: warn-only — Copilot hooks cannot block a submitted prompt (platform limit); file reads blocked via `.github/hooks` (`version: 1`); VS Code agent mode loads repo hooks via the shared Copilot runtime (Preview; `chat.useHooks` gates the legacy Local harness only); repo hooks load in interactive Copilot CLI sessions only ([#3345](https://github.com/github/copilot-cli/issues/3345)) |
 
 ---
 
@@ -135,7 +135,7 @@ Copy the `fallback/` folder to the target machine and run the installer as above
 | `doctor` | Check the engine, rules and all registered hooks. |
 | `allow prompt --Nm` | Allow prompts for N minutes (audited). |
 | `allow file <path> --Nm` | Allow reading a file for N minutes (audited). |
-| `check-prompt` | Scan a prompt from stdin. Exit code `2` = blocked. Options: `--warn-only` — warn + audit `warned` instead of blocking (for platforms that can't block prompts). |
+| `check-prompt` | Scan a prompt from stdin. Exit code `2` = blocked. Options: `--warn-only` — warn + audit `warned` instead of blocking (for platforms that can't block prompts) (still exits 2 so the host surfaces the warning). |
 | `check-file <path>` | Check a path against sensitive-file rules. Exit code `2` = blocked. |
 | `self-test` | Run the built-in test fixtures against the engine. |
 | `uninstall [--purge]` | Remove hooks. `--purge` also deletes `.ai-guard/` including logs. |
