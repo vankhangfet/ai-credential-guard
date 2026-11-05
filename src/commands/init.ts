@@ -9,7 +9,23 @@ const DEFAULT_RULES = {
   override: {},
   remove: [],
 };
-const DEFAULT_CONFIG = { sensitivePaths: null, genericSecret: true, highEntropy: true };
+const DEFAULT_CONFIG = {
+  sensitivePaths: null,
+  genericSecret: true,
+  highEntropy: true,
+  // Optional: JEV / OpenJEV (hoặc openjev-server tương thích) — decision API second-opinion.
+  // Mặc định TẮT. Để bật: enabled=true + endpoint; API key đọc từ biến môi trường apiKeyEnv
+  // (KHÔNG lưu key trong file này). mode="warn"|"block", threshold 0..1.
+  jev: {
+    enabled: false,
+    endpoint: "",
+    apiKeyEnv: "JEV_API_KEY",
+    model: "",
+    mode: "warn",
+    threshold: 0.8,
+    timeoutMs: 1500,
+  },
+};
 
 export async function init(argv: string[], _input: string): Promise<number> {
   const root = flagValue(argv, "--root") ?? process.cwd();

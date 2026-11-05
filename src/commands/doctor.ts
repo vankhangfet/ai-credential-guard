@@ -24,6 +24,15 @@ export async function doctor(argv: string[]): Promise<number> {
     const rules = loadRules(root);
     const cfg = loadConfig(root);
     console.log(`Rules: ${rules.length} (sensitive paths: ${cfg.sensitivePaths?.length ?? 0})`);
+    // JEV / OpenJEV (optional decision API)
+    if (cfg.jev?.enabled) {
+      const keyVar = cfg.jev.apiKeyEnv ?? "JEV_API_KEY";
+      const hasKey = !!process.env[keyVar];
+      console.log(`JEV: enabled → ${cfg.jev.endpoint} (mode=${cfg.jev.mode}, threshold=${cfg.jev.threshold}, timeout=${cfg.jev.timeoutMs}ms)`);
+      console.log(`  ${hasKey ? "✓" : "⚠"} API key env ${keyVar}: ${hasKey ? "set" : "not set (sending unauthenticated — ok for local openjev-server)"}`);
+    } else {
+      console.log("JEV: disabled (optional — set jev.enabled + jev.endpoint in .ai-guard/config.json to enable)");
+    }
   } catch (e) {
     allOk = false;
     console.log("  ✗ failed to load rules/config: " + e);

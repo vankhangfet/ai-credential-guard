@@ -1,9 +1,11 @@
 import { loadRules, loadConfig } from "../engine/loader";
 import { scanText } from "../engine/scanner";
+import { scanWithJev } from "../engine/jev";
 import { appendAuditEvent } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { findProjectRoot } from "../root";
 import { flagValue } from "../util/argv";
+import type { Finding } from "../types";
 
 export function extractPrompt(input: string): string | null {
   const s = input.trim();
@@ -37,19 +39,31 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   const cfg = loadConfig(projectRoot);
   const rules = loadRules(projectRoot);
   const findings = scanText(prompt, rules, cfg);
-  if (!findings.length) return 0;
-  const blocks = findings.filter((f) => f.severity === "block");
-  const warns = findings.filter((f) => f.severity === "warn");
+  // JEV / OpenJEV (optional, mặc định tắt): second opinion từ decision API. Fail-open hoàn toàn —
+  // lỗi/timeout -> [] -> không đổi hành vi. Findings JEV gộp vào pipeline block/warn/bypass như regex.
+  const jevScores = new Map<string, number>();
+  const jevFindings = await scanWithJev(prompt, cfg.jev);
+  for (const f of jevFindings) {
+    const score = parseJevScore(f.description);
+    if (score !== null) jevScores.set(f.ruleId, score);
+  }
+  const allFindings: Finding[] = [...findings, ...jevFindings];
+  if (!allFindings.length) return 0;
+  const blocks = allFindings.filter((f) => f.severity === "block");
+  const warns = allFindings.filter((f) => f.severity === "warn");
   const nowISO = new Date().toISOString();
   if (warns.length) {
-    appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: "warned", rule: warns[0].ruleId, preview: warns[0].preview, count: warns.length });
+    const w = warns[0];
+    appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: "warned", rule: w.ruleId, preview: w.preview, count: warns.length, source: jevScores.has(w.ruleId) ? "jev" : "engine", score: jevScores.get(w.ruleId) });
   }
   if (!blocks.length) return 0;
   if (hasValidBypass(projectRoot, "prompt")) {
-    appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: "allowed_after_confirm", rule: blocks[0].ruleId, preview: blocks[0].preview, count: blocks.length });
+    const b = blocks[0];
+    appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: "allowed_after_confirm", rule: b.ruleId, preview: b.preview, count: blocks.length, source: jevScores.has(b.ruleId) ? "jev" : "engine", score: jevScores.get(b.ruleId) });
     return 0;
   }
-  appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: warnOnly ? "warned" : "blocked", rule: blocks[0].ruleId, preview: blocks[0].preview, count: blocks.length });
+  const b0 = blocks[0];
+  appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: warnOnly ? "warned" : "blocked", rule: b0.ruleId, preview: b0.preview, count: blocks.length, source: jevScores.has(b0.ruleId) ? "jev" : "engine", score: jevScores.get(b0.ruleId) });
   const lines = [
     warnOnly
       ? "ai-guard: WARNING — credential detected in prompt. This tool cannot block prompts (platform limit): the text may still be sent to the model."
@@ -66,4 +80,11 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   );
   process.stderr.write(lines.join("\n") + "\n");
   return 2;
+}
+
+// Trích % confidence mà jev.ts đã nhúng vào description ("… (NN% confidence)") -> số 0..1 cho audit.
+function parseJevScore(description: string): number | null {
+  const m = description.match(/\((\d{1,3})% confidence\)/);
+  if (!m) return null;
+  return Math.max(0, Math.min(1, Number(m[1]) / 100));
 }

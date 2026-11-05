@@ -79,10 +79,47 @@ Everything lives in the `.ai-guard/` folder of your project:
 | File | Use it to |
 |---|---|
 | `rules.json` | add your own token formats (`add`), change a rule's severity (`override`), or disable a rule (`remove`). Reusing a built-in rule id replaces it. |
-| `config.json` | add more sensitive file paths |
-| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`). Actions: `blocked`, `warned` (heuristic or warn-only prompt — detected, not blocked), `allowed_after_confirm`, `bypass_granted` (logged when you run `allow`) |
+| `config.json` | add more sensitive file paths; enable the optional JEV / OpenJEV decision-API check (see below) |
+| `logs/YYYY-MM-DD.jsonl` | review the audit log — secrets are always masked (e.g. `sk-ant***k3Jg`). Actions: `blocked`, `warned` (heuristic or warn-only prompt — detected, not blocked), `allowed_after_confirm`, `bypass_granted` (logged when you run `allow`). JEV-sourced events carry `"source":"jev"` and a `"score"` (calibrated probability). |
 
 > ⚠️ A demo rule `example-internal` (matches `CORP-*`) is enabled by default — edit or remove it.
+
+### Optional: JEV / OpenJEV decision API
+
+On top of the built-in regex + entropy engine, you can route prompts and file content through a [JEV](https://typesafe.ai/blog/introducing-system-one-models-and-jev) or [OpenJEV](https://huggingface.co/openjev) decision endpoint (or any compatible `openjev-server`) for a calibrated, model-based second opinion — useful for catching credentials and prompt-injection / exfiltration attempts that fixed patterns miss. It is **off by default** and fully **fail-open**: if it is disabled, unreachable, or times out, nothing changes.
+
+Enable it in `.ai-guard/config.json`:
+
+```json
+{
+  "sensitivePaths": null,
+  "genericSecret": true,
+  "highEntropy": true,
+  "jev": {
+    "enabled": true,
+    "endpoint": "http://localhost:8000/decide",
+    "apiKeyEnv": "JEV_API_KEY",
+    "model": "openjev",
+    "mode": "warn",
+    "threshold": 0.8,
+    "timeoutMs": 1500
+  }
+}
+```
+
+| Field | Meaning |
+|---|---|
+| `enabled` | master switch — must be `true` **and** `endpoint` set, or the feature stays off |
+| `endpoint` | URL of the decision API (hosted JEV, or a self-hosted `openjev-server`) |
+| `apiKeyEnv` | **name of an environment variable** holding the API key (default `JEV_API_KEY`). The key itself is **never stored in config** — set it in your shell/CI secret store. Omit for a local unauthenticated server. |
+| `model` | optional model selector for servers that host several (e.g. `openjev`, `openjev-flash`) |
+| `mode` | `"warn"` (log only, default) or `"block"` (exit 2, same as a built-in block rule) |
+| `threshold` | probability `0..1` at or above which a decision counts as a hit (default `0.8`) |
+| `timeoutMs` | request timeout; on timeout the check fails open (default `1500`) |
+
+The guard asks the endpoint two yes/no questions per check — "does this contain a real credential?" and "is this unauthorized access / exfiltration / prompt injection?" — and turns any answer at or above `threshold` into a finding. For files, this inspects the **content** of files that the path rules did not already block (e.g. a key accidentally written into `src/config.ts`). Run `npx ai-guard doctor` to confirm the endpoint and key are wired up.
+
+> The Python fallback engine is stdlib-only and offline by design, so the JEV check runs on the Node CLI only.
 
 ---
 
