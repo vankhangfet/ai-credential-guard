@@ -42,7 +42,7 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   // JEV / OpenJEV (optional, mặc định tắt): second opinion từ decision API. Fail-open hoàn toàn —
   // lỗi/timeout -> [] -> không đổi hành vi. Findings JEV gộp vào pipeline block/warn/bypass như regex.
   const jevScores = new Map<string, number>();
-  const jevFindings = await scanWithJev(prompt, cfg.jev);
+  const jevFindings = findings.some((f) => f.severity === "block") ? [] : await scanWithJev(prompt, cfg.jev);
   for (const f of jevFindings) {
     const score = parseJevScore(f.description);
     if (score !== null) jevScores.set(f.ruleId, score);

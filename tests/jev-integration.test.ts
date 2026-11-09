@@ -23,7 +23,9 @@ function writeJevConfig(mode: "warn" | "block" = "block", threshold = 0.8) {
 function stubFetch(scores: Record<string, number>) {
   globalThis.fetch = vi.fn(async () => ({
     ok: true,
-    json: async () => ({ answers: Object.entries(scores).map(([id, probability]) => ({ id, probability })) }),
+    json: async () => ({
+      answers: Object.fromEntries(Object.entries(scores).map(([id, noul]) => [id, { type: "noul", noul }])),
+    }),
   })) as any;
 }
 

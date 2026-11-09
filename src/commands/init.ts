@@ -23,7 +23,7 @@ const DEFAULT_CONFIG = {
     model: "",
     mode: "warn",
     threshold: 0.8,
-    timeoutMs: 1500,
+    timeoutMs: 5000,
   },
 };
 

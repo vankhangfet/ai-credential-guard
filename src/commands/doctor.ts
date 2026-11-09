@@ -28,7 +28,8 @@ export async function doctor(argv: string[]): Promise<number> {
     if (cfg.jev?.enabled) {
       const keyVar = cfg.jev.apiKeyEnv ?? "JEV_API_KEY";
       const hasKey = !!process.env[keyVar];
-      console.log(`JEV: enabled → ${cfg.jev.endpoint} (mode=${cfg.jev.mode}, threshold=${cfg.jev.threshold}, timeout=${cfg.jev.timeoutMs}ms)`);
+      console.log(`JEV: enabled → ${cfg.jev.endpoint} (model=${cfg.jev.model ?? "jev-latest (default)"}, mode=${cfg.jev.mode}, threshold=${cfg.jev.threshold}, timeout=${cfg.jev.timeoutMs}ms)`);
+      if (!cfg.jev.model) console.log("  ⚠ jev.model not set — using \"jev-latest\". Self-hosted servers (e.g. Ollama/OpenJev) need their own model id, else requests 404 and the check silently fails open.");
       console.log(`  ${hasKey ? "✓" : "⚠"} API key env ${keyVar}: ${hasKey ? "set" : "not set (sending unauthenticated — ok for local openjev-server)"}`);
     } else {
       console.log("JEV: disabled (optional — set jev.enabled + jev.endpoint in .ai-guard/config.json to enable)");

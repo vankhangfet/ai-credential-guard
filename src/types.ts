@@ -37,7 +37,7 @@ export interface JevConfig {
   model?: string;            // optional — chọn model trên openjev-server (vd "openjev")
   mode?: Severity;           // severity cho finding JEV (default "warn" — không chặn cứng theo mặc định)
   threshold?: number;        // ngưỡng xác suất 0..1 để coi là phát hiện (default 0.8)
-  timeoutMs?: number;        // timeout request (default 1500) — fail-open khi quá hạn
+  timeoutMs?: number;        // timeout request (default 5000) — fail-open khi quá hạn
 }
 
 export interface AiGuardConfig {

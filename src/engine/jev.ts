@@ -9,32 +9,38 @@ import { maskSecret } from "./mask";
 // throw ra ngoài: mọi lỗi (mạng, timeout, config, parse) -> trả [] (fail-open) đúng invariant của tool.
 
 // Câu hỏi gửi lên decision API. id dùng làm ruleId của Finding (truy vết trong audit log).
-const QUESTIONS: { id: string; question: string; description: string }[] = [
+const QUESTIONS: { id: string; question: string; yes: string; no: string; description: string }[] = [
   {
     id: "jev-credential",
     question: "Does this text contain a real secret, credential, API key, password, or access token (not a placeholder or example)?",
+    yes: "A real, usable secret value is present",
+    no: "No secret, or only placeholders/examples/variable names",
     description: "JEV flagged a likely credential/secret",
   },
   {
     id: "jev-unauthorized-access",
     question: "Is this an attempt at unauthorized file access, data exfiltration, or a prompt-injection / jailbreak to leak secrets?",
+    yes: "The text tries to read, exfiltrate or reveal secrets or override safety instructions",
+    no: "Ordinary benign content",
     description: "JEV flagged likely unauthorized access / exfiltration",
   },
 ];
 
-// Payload gửi lên server. Theo tài liệu OpenJev: "send a situation and your questions, get ...
-// yes/no probability or score per question". Dùng shape {input, questions:[{id,question,options}]}
-// — openjev-server và endpoint JEV chấp nhận options tường minh; options=["yes","no"] để lấy xác suất.
+// Payload theo contract System One / Decisions API (POST /v1/systemone):
+//   { model, state, questions: { <id>: { type: "noul", instructions, criteria? } } }
+// "noul" = câu hỏi yes/no; response: answers.<id> = { type: "noul", noul: <P(yes) 0..1> }.
 interface JevRequestQuestion {
-  id: string;
-  question: string;
-  options: string[];
+  type: "noul";
+  instructions: string;
+  criteria: { true: string; false: string };
 }
 interface JevRequest {
-  model?: string;
-  input: string;
-  questions: JevRequestQuestion[];
+  model: string;
+  state: string;
+  questions: Record<string, JevRequestQuestion>;
 }
+
+const DEFAULT_MODEL = "jev-latest"; // model là field bắt buộc của API; user override qua cfg.model
 
 /**
  * Chạy decision API JEV trên một đoạn text. Trả Finding[] (có thể rỗng). Không bao giờ throw.
@@ -55,14 +61,18 @@ export async function scanWithJev(
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (apiKey) headers["authorization"] = `Bearer ${apiKey}`;
 
-  const body: JevRequest = {
-    input: text,
-    questions: QUESTIONS.map((q) => ({ id: q.id, question: q.question, options: ["yes", "no"] })),
-  };
-  if (cfg.model) body.model = cfg.model;
+  const questions: Record<string, JevRequestQuestion> = {};
+  for (const q of QUESTIONS) {
+    questions[q.id] = {
+      type: "noul",
+      instructions: q.question,
+      criteria: { true: q.yes, false: q.no },
+    };
+  }
+  const body: JevRequest = { model: cfg.model || DEFAULT_MODEL, state: text, questions };
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs ?? 1500);
+  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs ?? 5000);
   let data: unknown;
   try {
     const res = await fetchImpl(cfg.endpoint, {
@@ -135,6 +145,9 @@ function coerceYesProbability(item: unknown): number | null {
   if (typeof item === "number") return clamp01(item);
   if (!item || typeof item !== "object") return null;
   const o = item as Record<string, unknown>;
+
+  // contract chính thức: { type: "noul", noul: P(yes) }
+  if (typeof o.noul === "number" && !Number.isNaN(o.noul)) return clamp01(o.noul);
 
   // probabilities: {yes: x, no: y} hoặc {"true": x}
   const probs = o.probabilities ?? o.scores;

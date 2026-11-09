@@ -51,7 +51,7 @@ function normalizeJevConfig(j: JevConfig | undefined): JevConfig {
   const endpoint = typeof j.endpoint === "string" ? j.endpoint.trim() : "";
   const enabled = j.enabled === true && endpoint.length > 0;
   const threshold = typeof j.threshold === "number" && j.threshold >= 0 && j.threshold <= 1 ? j.threshold : 0.8;
-  const timeoutMs = typeof j.timeoutMs === "number" && j.timeoutMs > 0 ? Math.min(j.timeoutMs, 30000) : 1500;
+  const timeoutMs = typeof j.timeoutMs === "number" && j.timeoutMs > 0 ? Math.min(j.timeoutMs, 30000) : 5000;
   const mode: Severity = j.mode === "block" ? "block" : "warn";
   return {
     enabled,

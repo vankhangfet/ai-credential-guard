@@ -96,8 +96,35 @@ describe("scanWithJev", () => {
     expect(seenUrl).toBe(baseCfg.endpoint);
     expect(seenInit.headers.authorization).toBe("Bearer sk-test-123");
     const body = JSON.parse(seenInit.body);
-    expect(body.questions.length).toBe(2);
-    expect(body.input).toBe("hello");
+    // contract thật: { model, state, questions: { id: {type:"noul", instructions, criteria} } }
+    expect(body.state).toBe("hello");
+    expect(typeof body.model).toBe("string");
+    expect(Object.keys(body.questions).sort()).toEqual(["jev-credential", "jev-unauthorized-access"]);
+    expect(body.questions["jev-credential"].type).toBe("noul");
+    expect(typeof body.questions["jev-credential"].instructions).toBe("string");
+  });
+
+  it("response chính thức { answers: { id: { type:'noul', noul } } } -> Finding", async () => {
+    const json = {
+      model: "jev-latest",
+      answers: {
+        "jev-credential": { type: "noul", noul: 0.93 },
+        "jev-unauthorized-access": { type: "noul", noul: 0.02 },
+      },
+      usage: { input_tokens: 10, output_tokens: 2 },
+    };
+    const out = await scanWithJev("x", baseCfg, fakeFetch(json));
+    expect(out.map((f) => f.ruleId)).toEqual(["jev-credential"]);
+    expect(out[0].description).toContain("93% confidence");
+  });
+
+  it("cfg.model được gửi lên; mặc định jev-latest", async () => {
+    let body: any;
+    const cap = (_u: string, i: any) => { body = JSON.parse(i.body); };
+    await scanWithJev("x", { ...baseCfg, model: "typesafe/jev-1.13" }, fakeFetch({ answers: {} }, true, cap));
+    expect(body.model).toBe("typesafe/jev-1.13");
+    await scanWithJev("x", baseCfg, fakeFetch({ answers: {} }, true, cap));
+    expect(body.model).toBe("jev-latest");
   });
 
   it("không có env key -> gửi không kèm Authorization (local openjev-server)", async () => {
