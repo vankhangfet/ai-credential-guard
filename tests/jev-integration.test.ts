@@ -12,14 +12,14 @@ function writeJevConfig(mode: "warn" | "block" = "block", threshold = 0.8) {
     join(root, ".ai-guard", "config.json"),
     JSON.stringify({
       sensitivePaths: null,
-      genericSecret: false, // tắt engine để cô lập hành vi JEV
+      genericSecret: false, // disable the engine to isolate JEV behavior
       highEntropy: false,
       jev: { enabled: true, endpoint: "http://localhost:8000/decide", apiKeyEnv: "JEV_API_KEY", mode, threshold, timeoutMs: 1000 },
     }),
   );
 }
 
-// stub global fetch trả về xác suất cho sẵn theo question id.
+// Stub global fetch to return preset probabilities per question id.
 function stubFetch(scores: Record<string, number>) {
   globalThis.fetch = vi.fn(async () => ({
     ok: true,
@@ -68,20 +68,20 @@ describe("check-prompt + JEV", () => {
     expect(lastEvent().source).toBe("jev");
   });
 
-  it("JEV dưới threshold -> exit 0, không log", async () => {
+  it("JEV below threshold -> exit 0, no log", async () => {
     writeJevConfig("block", 0.9);
     stubFetch({ "jev-credential": 0.5 });
     expect(await runCli(["check-prompt", "--root", root], stdinOf("prompt"))).toBe(0);
   });
 
-  it("JEV endpoint lỗi -> fail-open exit 0", async () => {
+  it("JEV endpoint error -> fail-open exit 0", async () => {
     writeJevConfig("block");
     globalThis.fetch = vi.fn(async () => { throw new Error("down"); }) as any;
     expect(await runCli(["check-prompt", "--root", root], stdinOf("prompt"))).toBe(0);
   });
 
-  it("JEV disabled (mặc định) -> không gọi fetch", async () => {
-    // không ghi config -> jev disabled; engine cũng tắt vì prompt sạch
+  it("JEV disabled (default) -> fetch not called", async () => {
+    // no config written -> jev disabled; the engine is also off because the prompt is clean
     const spy = vi.fn();
     globalThis.fetch = spy as any;
     await runCli(["check-prompt", "--root", root], stdinOf("prompt sạch bình thường"));
@@ -90,7 +90,7 @@ describe("check-prompt + JEV", () => {
 });
 
 describe("check-file + JEV (content scan)", () => {
-  it("file thường chứa credential theo JEV -> exit 2", async () => {
+  it("regular file with credential per JEV -> exit 2", async () => {
     writeJevConfig("block");
     stubFetch({ "jev-credential": 0.95 });
     writeFileSync(join(root, "config.ts"), "export const key = 'something';\n");
@@ -101,14 +101,14 @@ describe("check-file + JEV (content scan)", () => {
     expect(lastEvent().path).toBe("config.ts");
   });
 
-  it("file thường sạch theo JEV -> exit 0", async () => {
+  it("regular file clean per JEV -> exit 0", async () => {
     writeJevConfig("block");
     stubFetch({ "jev-credential": 0.1 });
     writeFileSync(join(root, "config.ts"), "export const key = 'ok';\n");
     expect(await runCli(["check-file", "--root", root, "--tool", "claude-code", join(root, "config.ts")], "")).toBe(0);
   });
 
-  it("file không tồn tại -> bỏ qua, exit 0", async () => {
+  it("nonexistent file -> skipped, exit 0", async () => {
     writeJevConfig("block");
     stubFetch({ "jev-credential": 0.99 });
     expect(await runCli(["check-file", "--root", root, "--tool", "claude-code", join(root, "nope.ts")], "")).toBe(0);

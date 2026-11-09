@@ -4,33 +4,33 @@ import type { AdapterBase, InstallOptions, InstallResult } from "./types";
 import { MARKER } from "../util/json-config";
 import { appendMarkedSection, removeMarkedSection, SECTION_MARKER, templatePath } from "./hooks-json";
 
-// GitHub Copilot (VS Code + CLI) — education layer chính + unified hook file.
+// GitHub Copilot (VS Code + CLI) — primary education layer + unified hook file.
 // Step 0 verified (docs.github.com/en/copilot/reference/hooks-reference, Oct 2026):
-// Copilot CLI + VS Code đọc repo-level `.github/hooks/*.json` dạng { "version": 1, hooks }
-// — event PascalCase (PreToolUse) dùng Claude matcher semantics + payload snake_case
-// (tool_name/tool_input — extractor check-file đã parse), exit 2 = DENY trên CLI
-// (fail-closed; chỉ timeout fail-open), blocking error trên VS Code agent mode.
-// GIỚI HẠN (platform, docs reference): userPromptSubmitted KHÔNG chặn được — exit 2 chỉ
-// surface stderr như warning, prompt vẫn tới model (check-prompt --warn-only: audit
-// 'warned' + stderr warning). Education layer (.github/copilot-instructions.md) vẫn là
-// lớp prompt chính.
+// Copilot CLI + VS Code read repo-level `.github/hooks/*.json` as { "version": 1, hooks }
+// — PascalCase events (PreToolUse) use Claude matcher semantics + snake_case payload
+// (tool_name/tool_input — already parsed by the check-file extractor), exit 2 = DENY on CLI
+// (fail-closed; only a timeout fails open), blocking error in VS Code agent mode.
+// LIMITATION (platform, docs reference): userPromptSubmitted CANNOT block — exit 2 only
+// surfaces stderr as a warning, the prompt still reaches the model (check-prompt --warn-only:
+// audit 'warned' + stderr warning). The education layer (.github/copilot-instructions.md)
+// remains the primary prompt layer.
 const HOOK_REL = join(".github", "hooks", "ai-guard.json");
 const INSTR_REL = join(".github", "copilot-instructions.md");
 
-// Kill-switch: schema đã verify ở Step 0; nếu VS Code đổi format và hook gây lỗi -> đặt false,
-// install vẫn ghi education layer và detail sẽ nêu rõ không chặn được (giới hạn nền tảng).
+// Kill-switch: schema verified in Step 0; if VS Code changes the format and the hook causes errors -> set false,
+// install still writes the education layer and the detail states it cannot block (platform limitation).
 const REGISTER_HOOK = true;
 
-// Unified format: "version": 1 required bởi Copilot CLI; VS Code đọc cùng file.
-// PreToolUse (PascalCase) -> payload tool_name/tool_input (đã parse), exit 2 = deny/block.
-// userPromptSubmitted (camelCase CLI event) -> warn-only (platform không cho block).
+// Unified format: "version": 1 is required by Copilot CLI; VS Code reads the same file.
+// PreToolUse (PascalCase) -> payload tool_name/tool_input (already parsed), exit 2 = deny/block.
+// userPromptSubmitted (camelCase CLI event) -> warn-only (platform does not allow blocking).
 const HOOK_BODY =
   JSON.stringify(
     {
       version: 1,
       hooks: {
         PreToolUse: [
-          { type: "command", command: "npx --no-install ai-guard check-file --tool copilot", timeoutSec: 30 }, // npx fallback ~6-10s lần đầu — 30s headroom, docs default 30
+          { type: "command", command: "npx --no-install ai-guard check-file --tool copilot", timeoutSec: 30 }, // npx fallback ~6-10s on first run — 30s headroom, docs default 30
         ],
         userPromptSubmitted: [
           { type: "command", command: "npx --no-install ai-guard check-prompt --tool copilot --warn-only", timeoutSec: 30 },
@@ -44,18 +44,18 @@ const HOOK_BODY =
 export const copilotAdapter: AdapterBase = {
   id: "copilot",
   label: "GitHub Copilot (VS Code + CLI)",
-  // Copilot CLI project có thể KHÔNG có .vscode — detect thêm qua artifact của chính ta
-  // (hook file có marker / instructions có section), nếu không doctor báo "No adapters
-  // detected" gây hiểu lầm hook chưa cài trên đúng nhóm user mới (CLI-only).
+  // A Copilot CLI project may have NO .vscode — also detect via our own artifacts
+  // (hook file with marker / instructions with section), otherwise doctor reports "No adapters
+  // detected", misleadingly suggesting hooks are not installed for CLI-only users.
   detect: (root) =>
     existsSync(join(root, ".vscode")) ||
     (existsSync(join(root, HOOK_REL)) && readFileSync(join(root, HOOK_REL), "utf8").includes(MARKER)) ||
     (existsSync(join(root, INSTR_REL)) && readFileSync(join(root, INSTR_REL), "utf8").includes(SECTION_MARKER)),
   install(root: string, opts: InstallOptions): InstallResult {
     try {
-      // Atomic install: kiểm tra slot hook + tính education TRƯỚC khi mutate file nào.
-      // `.github/hooks/` cho phép nhiều hook files nên ai-guard sở hữu file `ai-guard.json`
-      // riêng; file lạ (không marker) chiếm slot -> từ chối ghi đè.
+      // Atomic install: check the hook slot + compute education content BEFORE mutating any file.
+      // `.github/hooks/` allows multiple hook files, so ai-guard owns its own `ai-guard.json`;
+      // a foreign file (no marker) occupying the slot -> refuse to overwrite.
       const hookPath = join(root, HOOK_REL);
       if (REGISTER_HOOK && existsSync(hookPath) && !readFileSync(hookPath, "utf8").includes(MARKER)) {
         return { adapter: "copilot", ok: false, detail: `${HOOK_REL} exists but does not belong to ai-guard — not overwriting` };
@@ -90,15 +90,15 @@ export const copilotAdapter: AdapterBase = {
   },
   uninstall(root: string): InstallResult {
     try {
-      // Hook: file hoàn toàn của ai-guard — chỉ xóa khi có marker.
+      // Hook: file fully owned by ai-guard — delete only when the marker is present.
       const hookPath = join(root, HOOK_REL);
       let removedHook = false;
       if (existsSync(hookPath) && readFileSync(hookPath, "utf8").includes(MARKER)) {
         rmSync(hookPath);
         removedHook = true;
       }
-      // Instructions: bỏ section marker-guarded, GIỮ content user; nếu sau khi bỏ section không
-      // còn gì (file vốn chỉ do ai-guard tạo) -> xóa luôn file.
+      // Instructions: remove the marker-guarded section, KEEP user content; if nothing remains
+      // after removal (file was created solely by ai-guard) -> delete the file too.
       const instrPath = join(root, INSTR_REL);
       const rest = removeMarkedSection(instrPath);
       let instrDetail: string;
@@ -137,7 +137,7 @@ export const copilotAdapter: AdapterBase = {
         const parsed = JSON.parse(readFileSync(hookPath, "utf8"));
         version = parsed?.version;
         if (parsed?.hooks && typeof parsed.hooks === "object") entries = parsed.hooks;
-      } catch { /* JSON hỏng -> entries rỗng -> outdated */ }
+      } catch { /* corrupt JSON -> empty entries -> outdated */ }
       const hasEntry = (event: string, cmdPart: string) =>
         Array.isArray(entries[event]) &&
         (entries[event] as Array<{ command?: unknown }>).some(

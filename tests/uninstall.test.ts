@@ -6,7 +6,7 @@ import { uninstall } from "../src/commands/uninstall";
 import { init } from "../src/commands/init";
 
 describe("uninstall", () => {
-  it("gỡ hook ai-guard khỏi mọi adapter, giữ .ai-guard", async () => {
+  it("removes ai-guard hooks from every adapter, keeps .ai-guard", async () => {
     const root = mkproject({ claudeCode: true });
     await init(["--root", root, "--tools", "claude-code"], "");
     const code = await uninstall(["--root", root]);
@@ -16,7 +16,7 @@ describe("uninstall", () => {
     const settings = JSON.parse(require("node:fs").readFileSync(join(root, ".claude", "settings.json"), "utf8"));
     expect(JSON.stringify(settings)).not.toContain("ai-guard");
   });
-  it("--purge: xóa hẳn .ai-guard", async () => {
+  it("--purge: removes .ai-guard entirely", async () => {
     const root = mkproject({ claudeCode: true });
     await init(["--root", root, "--tools", "claude-code"], "");
     expect(await uninstall(["--root", root, "--purge"])).toBe(0);

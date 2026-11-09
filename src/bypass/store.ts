@@ -12,12 +12,12 @@ interface BypassFlag {
 
 const bypassDir = (root: string) => join(root, ".ai-guard", ".bypass");
 
-// path phải là repo-relative đã chuẩn hóa (backslash→/, lowercase); caller (check-file) trách nhiệm relativize trước khi gọi
+// path must be a normalized repo-relative path (backslash→/, lowercase); the caller (check-file) is responsible for relativizing before calling
 function pathHash(path: string): string {
   return createHash("sha1").update(path.replace(/\\/g, "/").toLowerCase()).digest("hex").slice(0, 12);
 }
 
-// path phải là repo-relative đã chuẩn hóa (backslash→/, lowercase); caller (check-file) trách nhiệm relativize trước khi gọi
+// path must be a normalized repo-relative path (backslash→/, lowercase); the caller (check-file) is responsible for relativizing before calling
 function flagName(scope: string, path?: string): string {
   return `${scope}-${path ? pathHash(path) : "all"}.json`;
 }
@@ -44,7 +44,7 @@ export function hasValidBypass(root: string, scope: "prompt" | "file", path?: st
   const dir = bypassDir(root);
   try {
     if (!existsSync(dir)) return false;
-    // dọn flag hết hạn
+    // clean up expired flags
     for (const f of readdirSync(dir)) {
       if (!f.endsWith(".json")) continue;
       try {

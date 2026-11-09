@@ -7,7 +7,7 @@ export function findProjectRoot(startDir: string): string | null {
     return existsSync(envRoot) ? envRoot : null;
   }
   let dir = isAbsolute(startDir) ? startDir : resolve(startDir);
-  // giới hạn độ sâu 30 cấp
+  // limit depth to 30 levels
   for (let i = 0; i < 30; i++) {
     if (existsSync(join(dir, ".ai-guard"))) return dir;
     const parent = dirname(dir);

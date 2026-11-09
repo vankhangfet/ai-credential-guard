@@ -13,34 +13,34 @@ export function extractPrompt(input: string): string | null {
   if (s.startsWith("{")) {
     try {
       const j = JSON.parse(s);
-      // Alias keys mở rộng cho Kiro UserPromptSubmit (user-verified: prompt text findable
-      // dưới prompt|userPrompt|message|text|input|content, và lồng data.prompt|triggerData.prompt
-      // cho shape kiro #10346) — SUPERSET của fallback/engine.py: nested shape của Kiro chỉ có
-      // ở TS vì fallback chỉ phục vụ Claude Code/Codex.
+      // Extended alias keys for Kiro UserPromptSubmit (user-verified: prompt text findable
+      // under prompt|userPrompt|message|text|input|content, and nested data.prompt|triggerData.prompt
+      // for kiro shape #10346) — SUPERSET of fallback/engine.py: Kiro's nested shape exists
+      // only in TS because the fallback only serves Claude Code/Codex.
       const p = [j?.prompt, j?.input, j?.message, j?.text, j?.userPrompt, j?.content, j?.data?.prompt, j?.triggerData?.prompt].find((v) => typeof v === "string");
-      // JSON hợp lệ nhưng KHÔNG alias field nào là string (hook payload dùng field name lạ) ->
-      // fall-through quét RAW: prompt/secret vẫn nằm nguyên văn trong JSON text (fallback
-      // alias-miss của cline UserPromptSubmit shim truyền nguyên raw stdin).
+      // Valid JSON but NO alias field is a string (hook payload uses unusual field names) ->
+      // fall through and scan RAW: the prompt/secret still appears verbatim in the JSON text (fallback
+      // for alias-miss; the cline UserPromptSubmit shim passes raw stdin through unchanged).
       if (typeof p === "string") return p;
     } catch { /* fallthrough */ }
   }
-  return s; // raw text (hoặc raw JSON không có alias field nào)
+  return s; // raw text (or raw JSON with no alias field)
 }
 
 export async function checkPrompt(argv: string[], input: string): Promise<number> {
   const rootArg = flagValue(argv, "--root");
   const root = rootArg !== undefined ? rootArg : process.cwd();
   const tool = flagValue(argv, "--tool") ?? "unknown";
-  const warnOnly = argv.includes("--warn-only"); // boolean flag — dùng includes, KHÔNG flagValue (flagValue lấy value của flag kế tiếp)
+  const warnOnly = argv.includes("--warn-only"); // boolean flag — use includes, NOT flagValue (flagValue takes the value of the next flag)
   const prompt = extractPrompt(input);
   if (!prompt) return 0;
   const projectRoot = findProjectRoot(root);
-  if (!projectRoot) return 0; // chưa init -> fail-open
+  if (!projectRoot) return 0; // not initialized -> fail-open
   const cfg = loadConfig(projectRoot);
   const rules = loadRules(projectRoot);
   const findings = scanText(prompt, rules, cfg);
-  // JEV / OpenJEV (optional, mặc định tắt): second opinion từ decision API. Fail-open hoàn toàn —
-  // lỗi/timeout -> [] -> không đổi hành vi. Findings JEV gộp vào pipeline block/warn/bypass như regex.
+  // JEV / OpenJEV (optional, off by default): second opinion from the decision API. Fully fail-open —
+  // error/timeout -> [] -> no behavior change. JEV findings merge into the block/warn/bypass pipeline like regex ones.
   const jevScores = new Map<string, number>();
   const jevFindings = findings.some((f) => f.severity === "block") ? [] : await scanWithJev(prompt, cfg.jev);
   for (const f of jevFindings) {
@@ -82,7 +82,7 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   return 2;
 }
 
-// Trích % confidence mà jev.ts đã nhúng vào description ("… (NN% confidence)") -> số 0..1 cho audit.
+// Extract the % confidence that jev.ts embedded in the description ("… (NN% confidence)") -> number 0..1 for audit.
 function parseJevScore(description: string): number | null {
   const m = description.match(/\((\d{1,3})% confidence\)/);
   if (!m) return null;

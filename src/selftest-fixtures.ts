@@ -1,10 +1,10 @@
-// Fixtures dùng chung cho self-test runtime (src/commands/self-test) và test suite.
-// Đặt ở src/ (không phải tests/) để dist build không phải import ngược vào tests dir.
+// Fixtures shared by the runtime self-test (src/commands/self-test) and the test suite.
+// Placed in src/ (not tests/) so the dist build does not have to import back into the tests dir.
 export interface Fixture {
   name: string;
   input: string;
-  expectRule?: string;   // ruleId phải xuất hiện trong findings (nếu đặt)
-  expectBlocked: boolean; // có finding severity=block?
+  expectRule?: string;   // ruleId must appear in findings (if set)
+  expectBlocked: boolean; // is there a finding with severity=block?
 }
 
 export const FIXTURES: Fixture[] = [

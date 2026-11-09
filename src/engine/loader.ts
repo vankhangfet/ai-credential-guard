@@ -44,8 +44,8 @@ export function loadConfig(projectRoot: string): AiGuardConfig {
   };
 }
 
-// JEV mặc định TẮT: chỉ coi là enabled khi enabled===true VÀ có endpoint hợp lệ. Giá trị out-of-range
-// được kẹp về default an toàn. Không throw — config lỗi -> trả về disabled (fail-open).
+// JEV is OFF by default: enabled only when enabled===true AND a valid endpoint exists. Out-of-range values
+// are clamped to a safe default. Never throws — a bad config -> returns disabled (fail-open).
 function normalizeJevConfig(j: JevConfig | undefined): JevConfig {
   if (!j || typeof j !== "object") return { enabled: false };
   const endpoint = typeof j.endpoint === "string" ? j.endpoint.trim() : "";

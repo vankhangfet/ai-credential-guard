@@ -5,7 +5,7 @@ import { mkproject } from "./util/mkproject";
 import { init } from "../src/commands/init";
 
 describe("init", () => {
-  it("tạo cấu trúc .ai-guard + gitignore entries", async () => {
+  it("creates .ai-guard structure + gitignore entries", async () => {
     const root = mkproject({ claudeCode: true, gitignore: true });
     const res = await init(["--root", root, "--tools", "claude-code"], "");
     expect(res).toBe(0);
@@ -16,7 +16,7 @@ describe("init", () => {
     expect(gi).toContain(".ai-guard/logs/");
     expect(gi).toContain(".ai-guard/.bypass/");
   });
-  it("không ghi đè rules.json nếu user đã có", async () => {
+  it("does not overwrite rules.json if the user already has one", async () => {
     const root = mkproject({});
     mkdirSync(join(root, ".ai-guard"), { recursive: true });
     writeFileSync(join(root, ".ai-guard", "rules.json"), '{"add":[{"id":"x","severity":"block","pattern":"X-[0-9]{4}","description":"x"}]}');
@@ -25,20 +25,20 @@ describe("init", () => {
     const rules = JSON.parse(readFileSync(join(root, ".ai-guard", "rules.json"), "utf8"));
     expect(rules.add[0].id).toBe("x");
   });
-  it("cài hook cho tool phát hiện được khi không truyền --tools", async () => {
+  it("installs hooks for detected tools when --tools is not passed", async () => {
     const root = mkproject({ claudeCode: true, codex: true });
     const res = await init(["--root", root], "");
     expect(res).toBe(0);
     expect(existsSync(join(root, ".claude", "settings.json"))).toBe(true);
     expect(existsSync(join(root, ".codex", "hooks.json"))).toBe(true);
   });
-  it("--no-instructions: không tạo CLAUDE.md", async () => {
+  it("--no-instructions: does not create CLAUDE.md", async () => {
     const root = mkproject({ claudeCode: true });
     const res = await init(["--root", root, "--tools", "claude-code", "--no-instructions"], "");
     expect(res).toBe(0);
     expect(existsSync(join(root, "CLAUDE.md"))).toBe(false);
   });
-  it("không phát hiện tool nào -> exit 1 + hướng dẫn", async () => {
+  it("no tool detected -> exit 1 + guidance", async () => {
     const root = mkproject({});
     const res = await init(["--root", root], "");
     expect(res).toBe(1);

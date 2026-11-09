@@ -13,9 +13,9 @@ const DEFAULT_CONFIG = {
   sensitivePaths: null,
   genericSecret: true,
   highEntropy: true,
-  // Optional: JEV / OpenJEV (hoặc openjev-server tương thích) — decision API second-opinion.
-  // Mặc định TẮT. Để bật: enabled=true + endpoint; API key đọc từ biến môi trường apiKeyEnv
-  // (KHÔNG lưu key trong file này). mode="warn"|"block", threshold 0..1.
+  // Optional: JEV / OpenJEV (or a compatible openjev-server) — decision API second opinion.
+  // OFF by default. To enable: enabled=true + endpoint; the API key is read from the env var apiKeyEnv
+  // (do NOT store the key in this file). mode="warn"|"block", threshold 0..1.
   jev: {
     enabled: false,
     endpoint: "",
@@ -47,7 +47,7 @@ export async function init(argv: string[], _input: string): Promise<number> {
     return 1;
   }
 
-  // 1) cấu trúc .ai-guard
+  // 1) .ai-guard structure
   mkdirSync(join(root, ".ai-guard", "logs"), { recursive: true });
   mkdirSync(join(root, ".ai-guard", ".bypass"), { recursive: true });
   const rulesFile = join(root, ".ai-guard", "rules.json");

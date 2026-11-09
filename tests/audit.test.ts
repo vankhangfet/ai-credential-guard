@@ -16,10 +16,10 @@ beforeEach(() => {
 });
 
 describe("findProjectRoot", () => {
-  it("tìm .ai-guard từ thư mục con", () => {
+  it("finds .ai-guard from a subdirectory", () => {
     expect(findProjectRoot(nested)).toBe(root);
   });
-  it("env AI_GUARD_ROOT thắng", () => {
+  it("env AI_GUARD_ROOT wins", () => {
     process.env.AI_GUARD_ROOT = root;
     try { expect(findProjectRoot(join(tmpdir()))).toBe(root); }
     finally { delete process.env.AI_GUARD_ROOT; }
@@ -31,7 +31,7 @@ describe("findProjectRoot", () => {
 });
 
 describe("appendAuditEvent", () => {
-  it("ghi 1 dòng JSONL vào logs/YYYY-MM-DD.jsonl với ts ISO", () => {
+  it("writes one JSONL line to logs/YYYY-MM-DD.jsonl with an ISO ts", () => {
     appendAuditEvent(root, { ts: new Date().toISOString(), tool: "claude-code", event: "prompt", action: "blocked", rule: "jwt" });
     const files = readdirSync(join(root, ".ai-guard", "logs"));
     expect(files.length).toBe(1);
@@ -40,14 +40,14 @@ describe("appendAuditEvent", () => {
     expect(evt.tool).toBe("claude-code");
     expect(evt.action).toBe("blocked");
   });
-  it("append nhiều event thành nhiều dòng", () => {
+  it("appending multiple events yields multiple lines", () => {
     appendAuditEvent(root, { ts: new Date().toISOString(), tool: "x", event: "prompt", action: "warned" });
     appendAuditEvent(root, { ts: new Date().toISOString(), tool: "x", event: "prompt", action: "blocked" });
     const files = readdirSync(join(root, ".ai-guard", "logs"));
     const lines = readFileSync(join(root, ".ai-guard", "logs", files[0]), "utf8").trim().split("\n");
     expect(lines.length).toBe(2);
   });
-  it("không throw khi ghi log thất bại (root là file)", () => {
+  it("does not throw when logging fails (root is a file)", () => {
     const fileAsRoot = join(tmpdir(), "aig-file-root-" + Date.now());
     writeFileSync(fileAsRoot, "x");
     expect(() => appendAuditEvent(fileAsRoot, { ts: "", tool: "x", event: "prompt", action: "blocked" })).not.toThrow();

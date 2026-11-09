@@ -6,9 +6,9 @@ import { join } from "node:path";
 import { mkproject } from "./util/mkproject";
 import { clineAdapter } from "../src/adapters/cline";
 
-// Step 0 (verified): Cline hooks KHÔNG dùng settings.json kiểu Claude Code — mỗi event là
-// MỘT script thực thi tại .clinerules/hooks/<EventType> (không extension) — blog v3.36
-// "cline-v3-36-hooks" + dev.to + maybedont.ai. Prompt-side CÓ UserPromptSubmit (đăng ký luôn).
+// Step 0 (verified): Cline hooks do NOT use a Claude Code-style settings.json — each event is
+// ONE executable script at .clinerules/hooks/<EventType> (no extension) — blog v3.36
+// "cline-v3-36-hooks" + dev.to + maybedont.ai. Prompt-side DOES have UserPromptSubmit (registered too).
 const HOOKS_DIR = join(".clinerules", "hooks");
 const PRE = join(HOOKS_DIR, "PreToolUse");
 const PROMPT = join(HOOKS_DIR, "UserPromptSubmit");
@@ -18,35 +18,35 @@ describe("cline adapter", () => {
     expect(clineAdapter.detect(mkproject({ cline: true }))).toBe(true);
     expect(clineAdapter.detect(mkproject({}))).toBe(false);
   });
-  it("install ghi 2 hook script (PreToolUse + UserPromptSubmit) + idempotent", () => {
+  it("install writes 2 hook scripts (PreToolUse + UserPromptSubmit) + idempotent", () => {
     const root = mkproject({ cline: true });
     expect(clineAdapter.install(root, { instructions: false }).ok).toBe(true);
     clineAdapter.install(root, { instructions: false });
     const pre = readFileSync(join(root, PRE), "utf8");
     expect(pre).toContain("ai-guard check-file");
     expect((pre.match(/ai-guard check-file/g) ?? []).length).toBe(1);
-    expect(pre).toContain("cancel"); // blocking contract của Cline: stdout JSON {"cancel":true,...}
+    expect(pre).toContain("cancel"); // Cline blocking contract: stdout JSON {"cancel":true,...}
     const prompt = readFileSync(join(root, PROMPT), "utf8");
     expect(prompt).toContain("ai-guard check-prompt");
     expect((prompt.match(/ai-guard check-prompt/g) ?? []).length).toBe(1);
   });
-  it("install giữ hook user ở event khác; không ghi đè hook lạ cùng slot", () => {
+  it("install keeps user hooks on other events; does not overwrite a foreign hook in the same slot", () => {
     const root = mkproject({ cline: true });
-    // hook của user ở event khác (PostToolUse) — install không được đụng tới
+    // user hook on another event (PostToolUse) — install must not touch it
     mkdirSync(join(root, HOOKS_DIR), { recursive: true });
     writeFileSync(join(root, HOOKS_DIR, "PostToolUse"), "#!/bin/sh\nexit 0\n");
     expect(clineAdapter.install(root, { instructions: false }).ok).toBe(true);
     expect(readFileSync(join(root, HOOKS_DIR, "PostToolUse"), "utf8")).toBe("#!/bin/sh\nexit 0\n");
-    // hook lạ (không marker) chiếm đúng slot PreToolUse -> từ chối ghi đè, giữ nguyên file
+    // foreign hook (no marker) occupying the PreToolUse slot -> refuse to overwrite, leave file intact
     const root2 = mkproject({ cline: true });
     mkdirSync(join(root2, HOOKS_DIR), { recursive: true });
     writeFileSync(join(root2, PRE), "#!/bin/sh\n# my own hook\nexit 0\n");
     const res = clineAdapter.install(root2, { instructions: false });
     expect(res.ok).toBe(false);
     expect(readFileSync(join(root2, PRE), "utf8")).not.toContain("ai-guard");
-    expect(existsSync(join(root2, PROMPT))).toBe(false); // atomic: không ghi nốt hook còn lại
+    expect(existsSync(join(root2, PROMPT))).toBe(false); // atomic: does not write the remaining hook
   });
-  it("uninstall gỡ hook của mình, giữ hook lạ/event khác", () => {
+  it("uninstall removes own hooks, keeps foreign hooks/other events", () => {
     const root = mkproject({ cline: true });
     clineAdapter.install(root, { instructions: false });
     writeFileSync(join(root, HOOKS_DIR, "PostToolUse"), "#!/bin/sh\nexit 0\n");
@@ -55,7 +55,7 @@ describe("cline adapter", () => {
     expect(existsSync(join(root, PROMPT))).toBe(false);
     expect(readFileSync(join(root, HOOKS_DIR, "PostToolUse"), "utf8")).toContain("exit 0");
   });
-  it("doctor trước/sau install", () => {
+  it("doctor before/after install", () => {
     const root = mkproject({ cline: true });
     expect(clineAdapter.doctor(root).ok).toBe(false);
     clineAdapter.install(root, { instructions: false });
@@ -63,16 +63,16 @@ describe("cline adapter", () => {
   });
 });
 
-// Fix C (ride-along từ review Task 21): vitest THỰC THI template qua node thật để lock cancel
-// contract giữa template và engine. Template fast-path spawn tên MỚI `node_modules/ai-credential-guard/dist/cli.js` trước (tên cũ `ai-guard` là legacy fallback)
-// nên test copy dist ĐÃ BUILD của repo vào tmp project — CẦN `npm run build` trước; dist thiếu
-// (CI chưa build) -> skip toàn bộ (it.skipIf).
+// Fix C (ride-along from Task 21 review): vitest EXECUTES the templates through real node to lock the cancel
+// contract between template and engine. The template fast-path spawns the NEW name `node_modules/ai-credential-guard/dist/cli.js` first (old name `ai-guard` is a legacy fallback),
+// so the test copies the repo's BUILT dist into a tmp project — requires `npm run build` first; if dist is missing
+// (CI has not built) -> skip everything (it.skipIf).
 const DIST_CLI = join(__dirname, "..", "dist", "cli.js");
 const DIST_DIR = join(__dirname, "..", "dist");
 
-describe("cline templates (thực thi qua node — lock cancel contract)", () => {
+describe("cline templates (executed via node — lock cancel contract)", () => {
   function mkExecProject(): string {
-    const root = mkproject({ cline: true }); // .ai-guard sẵn -> engine chặn được
+    const root = mkproject({ cline: true }); // .ai-guard present -> engine can block
     clineAdapter.install(root, { instructions: false });
     cpSync(DIST_DIR, join(root, "node_modules", "ai-credential-guard", "dist"), { recursive: true });
     return root;
@@ -85,11 +85,11 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
       workspaceRoots: [root],
     });
     const r = spawnSync(process.execPath, [join(root, PRE)], { input: payload, encoding: "utf8", timeout: 30_000 });
-    expect(r.status).toBe(0); // contract Cline: chặn qua stdout JSON, KHÔNG qua exit code
+    expect(r.status).toBe(0); // Cline contract: block via stdout JSON, NOT via exit code
     expect(r.stdout).toContain('"cancel":true');
     expect(r.stdout).toContain("errorMessage");
   });
-  it.skipIf(!existsSync(DIST_CLI))("PreToolUse payload sạch -> stdout rỗng, exit 0", () => {
+  it.skipIf(!existsSync(DIST_CLI))("PreToolUse clean payload -> empty stdout, exit 0", () => {
     const root = mkExecProject();
     const payload = JSON.stringify({
       tool_name: "read_file",
@@ -100,7 +100,7 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
     expect(r.status).toBe(0);
     expect(r.stdout).toBe("");
   });
-  it.skipIf(!existsSync(DIST_CLI))("fast-path legacy: dist dưới tên cũ ai-guard vẫn resolve (backward compat)", () => {
+  it.skipIf(!existsSync(DIST_CLI))("legacy fast-path: dist under the old name ai-guard still resolves (backward compat)", () => {
     const root = mkproject({ cline: true });
     clineAdapter.install(root, { instructions: false });
     cpSync(DIST_DIR, join(root, "node_modules", "ai-guard", "dist"), { recursive: true });
@@ -113,10 +113,10 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
     expect(r.status).toBe(0);
     expect(r.stdout).toContain('"cancel":true');
   });
-  it.skipIf(!existsSync(DIST_CLI))("UserPromptSubmit alias-miss (Fix B): secret trong RAW JSON vẫn bị chặn", () => {
+  it.skipIf(!existsSync(DIST_CLI))("UserPromptSubmit alias-miss (Fix B): secret in RAW JSON is still blocked", () => {
     const root = mkExecProject();
-    // payload JSON hợp lệ nhưng KHÔNG alias field nào match (question) — secret nằm nguyên văn
-    // trong raw JSON -> template phải fallback quét raw thay vì bỏ qua.
+    // valid JSON payload but NO alias field matches (question) — the secret appears verbatim
+    // in the raw JSON -> the template must fall back to scanning raw instead of skipping.
     const payload = JSON.stringify({
       clineVersion: "3.36",
       question: "dùng key AKIAIOSFODNN7EXAMPLE giúp tôi",
@@ -129,9 +129,9 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
   it.skipIf(!existsSync(DIST_CLI) || process.platform !== "win32")(
     "fallback npx.cmd shell branch: bare token + quoted args (spaced path intact, injection neutralized)",
     () => {
-      // Shadow npx.cmd bằng stub prepend lên PATH của RIÊNG spawn này: shell branch của template
-      // gọi stub thay vì npx thật -> log ghi lại ĐÚNG những gì cmd.exe truyền sau khi parse dòng
-      // lệnh đã quote (stub chạy được cũng chứng minh token lệnh BARE resolve qua PATH).
+      // Shadow npx.cmd with a stub prepended to PATH for THIS spawn only: the template's shell branch
+      // calls the stub instead of real npx -> the log records EXACTLY what cmd.exe passes after parsing the
+      // quoted command line (the stub running also proves the BARE command token resolves via PATH).
       const stubDir = mkdtempSync(join(tmpdir(), "aig-stub-"));
       const logFile = join(stubDir, "args.log");
       writeFileSync(join(stubDir, "npx.cmd"), '@echo off\r\n>>"%AIG_STUB_LOG%" echo %*\r\nexit /b 0\r\n');
@@ -140,11 +140,11 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
       env[pathKey] = stubDir + ";" + (env[pathKey] ?? "");
       env.AIG_STUB_LOG = logFile;
 
-      // tmp project KHÔNG có local install dưới cả hai tên (bỏ qua mkExecProject) -> fallback npx.cmd.
+      // tmp project has NO local install under either name (skips mkExecProject) -> npx.cmd fallback.
       const root = mkproject({ cline: true });
       clineAdapter.install(root, { instructions: false });
 
-      // 1) path có space phải đến stub NGUYÊN VẸN như MỘT arg đã quote
+      // 1) a path with spaces must reach the stub INTACT as ONE quoted arg
       const spaced = join(root, "my dir", "sub space", ".env");
       const r1 = spawnSync(process.execPath, [join(root, PRE)], {
         input: JSON.stringify({ tool_name: "read_file", tool_input: { path: spaced }, workspaceRoots: [root] }),
@@ -156,7 +156,7 @@ describe("cline templates (thực thi qua node — lock cancel contract)", () =>
       expect(log).toContain('"--tool" "cline"');
       expect(log).toContain(`"${spaced}"`);
 
-      // 2) injection payload: metachars (&, >) chỉ còn literal TRONG quote của arg — không execute
+      // 2) injection payload: metachars (&, >) remain literal INSIDE the arg's quotes — not executed
       const pwnFile = join(root, "PWNED.txt");
       const r2 = spawnSync(process.execPath, [join(root, PRE)], {
         input: JSON.stringify({ tool_name: "read_file", tool_input: { path: `x&echo PWNED>${pwnFile}` }, workspaceRoots: [root] }),

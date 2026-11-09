@@ -10,6 +10,6 @@ export function appendAuditEvent(projectRoot: string, evt: AuditEvent): void {
     const day = now.toISOString().slice(0, 10);
     appendFileSync(join(dir, day + ".jsonl"), JSON.stringify(evt) + "\n");
   } catch {
-    // fail-open: audit không được làm hỏng hook
+    // fail-open: audit must not break the hook
   }
 }

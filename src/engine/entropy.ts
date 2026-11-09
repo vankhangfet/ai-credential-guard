@@ -14,7 +14,7 @@ const COMMON_WORD_RE = /^[a-z][a-z\-']{5,}$/;
 
 export function isHighEntropyToken(s: string, minLen = 20, minH = 3.5): boolean {
   if (s.length < minLen) return false;
-  // bỏ token thuần chữ thường giống từ tự nhiên
+  // skip purely lowercase tokens that look like natural words
   if (COMMON_WORD_RE.test(s) && shannonEntropy(s) < 4.2) return false;
   return shannonEntropy(s) >= minH;
 }

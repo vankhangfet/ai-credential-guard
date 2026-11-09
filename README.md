@@ -15,6 +15,15 @@ Works with **Claude Code, Codex CLI, OpenCode, Pi, Cline, Kiro, and GitHub Copil
 
 ---
 
+## What's new in 1.3.1
+
+**Fix: file-read blocking now works on Kiro CLI.**
+
+- **Kiro CLI 3.x**: the `PreToolUse` hook ran, but `fs_read` sends its paths as `tool_input.operations[].path` rather than as a top-level `path`. ai-guard found no path and allowed the read, so `.env` could be read without any error. `check-file` now reads every path in `operations[]` (and in `paths[]` / `file_paths[]` arrays) and blocks if any of them is sensitive, so a batch read that includes `.env` is caught.
+- **Kiro CLI 2.x**: not affected by this change, but also not covered by the hook. CLI 2.x only reads hooks from agent configs (`.kiro/agents/*.json`) and ignores the standalone `.kiro/hooks/ai-guard.json`. Only the steering file (`.kiro/steering/security.md`) applies there. Upgrade to CLI 3.x for hook enforcement.
+- **Heads-up for Kiro CLI 3.x**: a `PreToolUse` hook that crashes, times out, or cannot start (e.g. `ai-guard` not installed locally, so `npx --no-install` fails) **blocks every tool call**. If that happens, run `npm i -D ai-credential-guard`.
+- Internal: all source comments, docstrings and test titles are now in English.
+
 ## What's new in 1.3.0
 
 **Optional JEV / OpenJev support — a model-based second opinion on top of regex + entropy.**
@@ -91,7 +100,7 @@ Bypass windows range from 1 to 1440 minutes, and **every bypass is recorded** in
 | OpenCode | ✅ | ✅ | via plugin `.opencode/plugins/ai-guard.ts`; prompt side strips the secret from text parts before the model sees it (secrets split across parts or embedded in non-text parts can still pass) |
 | Cline | ✅ | ✅ | macOS/Linux; enable *Features → Hooks* |
 | Pi | ⚠️ | ✅ | prompt blocking is best-effort |
-| Kiro | ✅ | ✅ | tool-side needs IDE ≥ 1.0.116 ([#7500](https://github.com/kirodotdev/Kiro/issues/7500) fixed); use ≥ 1.0.293 ([#10346](https://github.com/kirodotdev/Kiro/issues/10346) prompt regression fixed) |
+| Kiro (IDE + CLI) | ✅ | ✅ | IDE: tool-side needs ≥ 1.0.116 ([#7500](https://github.com/kirodotdev/Kiro/issues/7500) fixed); use ≥ 1.0.293 ([#10346](https://github.com/kirodotdev/Kiro/issues/10346) prompt regression fixed). CLI: needs kiro-cli ≥ 3.0 (standalone `.kiro/hooks/` files) and ai-guard ≥ 1.3.1; kiro-cli 2.x ignores `.kiro/hooks/`, so only the steering layer applies |
 | GitHub Copilot (VS Code + CLI) | ⚠️ | ✅ | prompts: warn-only — Copilot hooks cannot block a submitted prompt (platform limit); file reads blocked via `.github/hooks` (`version: 1`); VS Code agent mode loads repo hooks via the shared Copilot runtime (Preview; `chat.useHooks` gates the legacy Local harness only); repo hooks load in interactive Copilot CLI sessions only ([#3345](https://github.com/github/copilot-cli/issues/3345)) |
 
 ---

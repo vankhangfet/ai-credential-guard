@@ -1,15 +1,15 @@
 ﻿# ai-guard fallback installer for Windows (no npm required). Requires python/py.
-# Chạy từ thư mục dự án: powershell -ExecutionPolicy Bypass -File \path\to\ai-guard\fallback\install.ps1
+# Run from the project directory: powershell -ExecutionPolicy Bypass -File \path\to\ai-guard\fallback\install.ps1
 $ErrorActionPreference = "Stop"
 
-# output UTF-8 để tiếng Việt không vỡ khi capture (PS 5.1 mặc định OEM codepage)
+# output UTF-8 so non-ASCII text is not garbled when captured (PS 5.1 defaults to the OEM codepage)
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
 $Root = (Get-Location).Path
 $Src = Split-Path -Parent $MyInvocation.MyCommand.Path
 
-# 0) python detection: py launcher TRƯỚC (python có thể là WindowsApps stub);
-#    probe --version exit-code trước khi dùng — stub thoát 9009 và viết ra stderr
+# 0) python detection: py launcher FIRST (python may be a WindowsApps stub);
+#    probe the --version exit code before use — the stub exits 9009 and writes to stderr
 function Test-PyExe([string]$Exe) {
   try { & $Exe --version 2>&1 | Out-Null; return ($LASTEXITCODE -eq 0) }
   catch { return $false }
@@ -51,13 +51,13 @@ foreach ($line in @("# ai-guard", ".ai-guard/logs/", ".ai-guard/.bypass/")) {
   if (-not $found) { Add-Content -Path $gi -Value $line -Encoding Ascii }
 }
 
-# 3) register hooks — claude-code (.claude\settings.json) + codex (.codex\hooks.json) qua python -c
-#    (merge an toàn: backup .aiguard.bak 1 lần, MARKER check không nhân đôi — mirror install.sh + adapter TS)
-#    Lưu ý: code python chỉ dùng nháy đơn + chr(34) — tránh double-quote trong argument native command.
+# 3) register hooks — claude-code (.claude\settings.json) + codex (.codex\hooks.json) via python -c
+#    (safe merge: .aiguard.bak backup once, MARKER check prevents duplicates — mirrors install.sh + the TS adapter)
+#    Note: the python code uses only single quotes + chr(34) — avoids double-quotes in native command arguments.
 $regCode = @'
 import json, os, sys
 path, py, script, tool, matcher = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
-q = chr(34)  # quote cả interpreter (có thể nằm trong dir có space) lẫn script path
+q = chr(34)  # quote both the interpreter (may be in a dir with spaces) and the script path
 eng = q + py + q + ' ' + q + script + q
 try:
     data = json.load(open(path, encoding='utf-8-sig'))
@@ -76,8 +76,8 @@ tmp = path + '.aiguard.tmp'
 open(tmp, 'w', encoding='utf-8').write(json.dumps(data, indent=2, ensure_ascii=False) + '\n')
 os.replace(tmp, path)
 '@
-# fail-fast guard: double-quote trong $regCode sẽ bị PS 5.1 chặt đứt khi qua native arg
-# (python -c nhận code truncate -> exit 0 mà không làm gì) — chặn sớm thay vì im lặng.
+# fail-fast guard: PS 5.1 mangles double-quotes in $regCode when passed as a native arg
+# (python -c receives truncated code -> exits 0 without doing anything) — fail early instead of silently.
 if ($regCode -match '"') { throw "ai-guard: regCode contains a double-quote — PS 5.1 native arg passing broken" }
 
 function Register-AiGuardHooks([string]$File, [string]$DefaultContent, [string]$Tool, [string]$Matcher) {
@@ -100,7 +100,7 @@ if (Test-Path "$Root\.codex") {
   $Registered = $true
 }
 
-# 4) guard: chưa thấy tool nào -> warn nhưng vẫn exit 0 (engine đã copy sẵn)
+# 4) guard: no tool found -> warn but still exit 0 (engine already copied)
 if (-not $Registered) {
   Write-Warning "ai-guard: WARNING — no .claude/.codex found — make sure you are running from the project root? (engine copied to .ai-guard\bin but no hooks registered)"
 }

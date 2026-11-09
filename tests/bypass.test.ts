@@ -11,32 +11,32 @@ beforeEach(() => {
 });
 
 describe("bypass store", () => {
-  it("chưa grant -> không có bypass", () => {
+  it("not granted -> no bypass", () => {
     expect(hasValidBypass(root, "prompt")).toBe(false);
   });
-  it("grant prompt 5 phút -> valid, đọc được metadata", () => {
+  it("grant prompt for 5 minutes -> valid, metadata readable", () => {
     const meta = grantBypass(root, "prompt", undefined, 5);
     expect(meta.duration_min).toBe(5);
     expect(hasValidBypass(root, "prompt")).toBe(true);
   });
-  it("hết hạn -> invalid và file bị dọn", () => {
-    grantBypass(root, "prompt", undefined, 0); // 0 phút = hết ngay
+  it("expired -> invalid and file cleaned up", () => {
+    grantBypass(root, "prompt", undefined, 0); // 0 minutes = expires immediately
     expect(hasValidBypass(root, "prompt")).toBe(false);
   });
-  it("bypass file scope theo đúng path", () => {
+  it("file bypass is scoped to the exact path", () => {
     grantBypass(root, "file", ".env", 10);
     expect(hasValidBypass(root, "file", ".env")).toBe(true);
     expect(hasValidBypass(root, "file", "other.key")).toBe(false);
   });
-  it("prompt bypass KHÔNG mở file bypass", () => {
+  it("prompt bypass does NOT unlock file bypass", () => {
     grantBypass(root, "prompt", undefined, 5);
     expect(hasValidBypass(root, "file", ".env")).toBe(false);
   });
-  it("file flag KHÔNG mở prompt bypass", () => {
+  it("file flag does NOT unlock prompt bypass", () => {
     grantBypass(root, "file", ".env", 5);
     expect(hasValidBypass(root, "prompt")).toBe(false);
   });
-  it("flag hết hạn bị XÓA khỏi đĩa", () => {
+  it("expired flag is DELETED from disk", () => {
     grantBypass(root, "prompt", undefined, 0);
     hasValidBypass(root, "prompt");
     const dir = join(root, ".ai-guard", ".bypass");

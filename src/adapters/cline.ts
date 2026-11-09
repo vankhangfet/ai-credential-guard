@@ -4,19 +4,19 @@ import type { AdapterBase, InstallOptions, InstallResult } from "./types";
 import { MARKER } from "../util/json-config";
 import { templatePath } from "./hooks-json";
 
-// Cline (v3.36+) KHÔNG dùng config hooks JSON kiểu Claude Code — mỗi event là MỘT script
-// thực thi tại `.clinerules/hooks/<EventType>` (tên file = tên event, KHÔNG extension, phải +x).
-// Nguồn: blog chính thức https://cline.bot/blog/cline-v3-36-hooks + dev.to (9/2026) + maybedont.ai.
-// docs.cline.bot getting-started/config.md mô tả layout mới hơn (`.cline/` chứa hooks/...) nên
-// detect chấp nhận CẢ `.clinerules` LẪN `.cline`; install luôn ghi vào `.clinerules/hooks/`
-// (layout được nhiều nguồn độc lập xác nhận nhất hiện nay).
+// Cline (v3.36+) does NOT use a Claude Code-style JSON hooks config — each event is ONE
+// executable script at `.clinerules/hooks/<EventType>` (file name = event name, NO extension, must be +x).
+// Sources: official blog https://cline.bot/blog/cline-v3-36-hooks + dev.to (9/2026) + maybedont.ai.
+// docs.cline.bot getting-started/config.md describes a newer layout (`.cline/` containing hooks/...), so
+// detect accepts BOTH `.clinerules` AND `.cline`; install always writes to `.clinerules/hooks/`
+// (the layout confirmed by the most independent sources so far).
 interface HookSpec {
-  rel: string[]; // path thành phần (posix) relative to project root
-  template: string; // tên file trong templates/
+  rel: string[]; // path components (posix) relative to project root
+  template: string; // file name in templates/
 }
 
-// DIVERGENCE vs spec ("Cline chưa expose prompt hook"): Step 0 verified Cline v3.36 CÓ
-// UserPromptSubmit (payload: prompt text + attachments) -> đăng ký cả prompt-side.
+// DIVERGENCE vs spec ("Cline does not expose a prompt hook yet"): Step 0 verified Cline v3.36 HAS
+// UserPromptSubmit (payload: prompt text + attachments) -> register the prompt side too.
 const HOOKS: HookSpec[] = [
   { rel: [".clinerules", "hooks", "PreToolUse"], template: "cline-hook-pretooluse.js" },
   { rel: [".clinerules", "hooks", "UserPromptSubmit"], template: "cline-hook-userpromptsubmit.js" },
@@ -34,9 +34,9 @@ export const clineAdapter: AdapterBase = {
   detect: (root) => existsSync(join(root, ".clinerules")) || existsSync(join(root, ".cline")),
   install(root: string, _opts: InstallOptions): InstallResult {
     try {
-      // Atomic install: kiểm tra MỌI slot TRƯỚC khi mutate file nào. Slot `.clinerules/hooks/<Event>`
-      // là slot CHÍNH của event (không merge JSON được như Claude Code) — hook lạ của user chiếm
-      // slot thì TỪ CHỐI ghi đè thay vì phá config user.
+      // Atomic install: check EVERY slot BEFORE mutating any file. The `.clinerules/hooks/<Event>` slot
+      // is the event's ONLY slot (JSON cannot be merged as with Claude Code) — if a foreign user hook
+      // occupies it, REFUSE to overwrite rather than break the user's config.
       const foreign = HOOKS.map((h) => join(root, ...h.rel)).filter(
         (dest) => existsSync(dest) && !readFileSync(dest, "utf8").includes(MARKER),
       );
@@ -52,11 +52,11 @@ export const clineAdapter: AdapterBase = {
         const content = readFileSync(templatePath(...templateCandidates(h.template)), "utf8");
         mkdirSync(dirname(dest), { recursive: true });
         writeFileSync(dest, content);
-        chmodSync(dest, 0o755); // Cline yêu cầu script thực thi được (no-op trên Windows)
+        chmodSync(dest, 0o755); // Cline requires the script to be executable (no-op on Windows)
       }
-      // Instructions: bỏ qua — Cline dùng `.clinerules/` cho rules nhưng layout (file đơn vs
-      // `.clinerules/*.md` vs `.cline/rules/` của docs mới) chưa thống nhất giữa các nguồn;
-      // chưa xác định được vị trí education an toàn (follow-up).
+      // Instructions: skipped — Cline uses `.clinerules/` for rules but the layout (single file vs
+      // `.clinerules/*.md` vs `.cline/rules/` in the newer docs) is inconsistent across sources;
+      // a safe education location has not been determined yet (follow-up).
       return {
         adapter: "cline",
         ok: true,
@@ -72,7 +72,7 @@ export const clineAdapter: AdapterBase = {
       for (const h of HOOKS) {
         const dest = join(root, ...h.rel);
         if (!existsSync(dest)) continue;
-        // Chỉ xóa file của mình: hook lạ (không marker) tại đúng slot đó thì giữ nguyên.
+        // Only delete our own files: a foreign hook (no marker) in that slot is left untouched.
         if (!readFileSync(dest, "utf8").includes(MARKER)) continue;
         rmSync(dest);
         removed++;

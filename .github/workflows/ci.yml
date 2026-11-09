@@ -23,8 +23,8 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
-      - name: dist/rules.json artifact tồn tại và đủ rules
-        # floor 50 — bump khi chỉnh catalog
+      - name: dist/rules.json artifact exists and has enough rules
+        # floor 50 — bump when editing the catalog
         run: node -e "const r=require('./dist/rules.json'); if(!Array.isArray(r)||r.length<50) process.exit(1); console.log('rules:',r.length)"
         shell: bash
       - name: bin shebang guard
@@ -60,10 +60,10 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: npm ci && npm run build
-      - name: copy rules artifact cho installer
+      - name: copy rules artifact for the installer
         run: cp dist/rules.json fallback/rules.json
         shell: bash
-      - name: installer smoke (bash, python3 từ setup-python)
+      - name: installer smoke (bash, python3 from setup-python)
         if: runner.os == 'Linux'
         run: |
           TMP=$(mktemp -d) && mkdir -p "$TMP/.claude" "$TMP/.codex" "$TMP/.ai-guard"
@@ -72,10 +72,10 @@ jobs:
           cd "$TMP" && bash "$GITHUB_WORKSPACE/fallback/install.sh"
           grep -q "check-prompt" "$TMP/.claude/settings.json"
           grep -q "check-file" "$TMP/.codex/hooks.json"
-          # engine-exec: khóa registered path + rules artifact chạy thật (bug class của 2a18be3)
+          # engine-exec: locks the registered path + the rules artifact actually running (bug class of 2a18be3)
           echo 'test sạch' | python3 "$TMP/.ai-guard/bin/engine.py" check-prompt --root "$TMP"
           echo "INSTALLER_SMOKE_OK"
-      - name: installer smoke (powershell, mirror của bash smoke)
+      - name: installer smoke (powershell, mirror of the bash smoke)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -87,9 +87,9 @@ jobs:
           & powershell -NoProfile -ExecutionPolicy Bypass -File "$env:GITHUB_WORKSPACE\fallback\install.ps1"
           Pop-Location
           if ($LASTEXITCODE -ne 0) { throw "install.ps1 exit $LASTEXITCODE" }
-          if (-not (Select-String -Path "$tmp\.claude\settings.json" -Pattern "check-prompt" -Quiet)) { throw "thiếu check-prompt trong settings.json" }
-          if (-not (Select-String -Path "$tmp\.codex\hooks.json" -Pattern "check-file" -Quiet)) { throw "thiếu check-file trong hooks.json" }
-          # engine-exec mirror: khóa registered path + rules artifact chạy thật
+          if (-not (Select-String -Path "$tmp\.claude\settings.json" -Pattern "check-prompt" -Quiet)) { throw "check-prompt missing from settings.json" }
+          if (-not (Select-String -Path "$tmp\.codex\hooks.json" -Pattern "check-file" -Quiet)) { throw "check-file missing from hooks.json" }
+          # engine-exec mirror: locks the registered path + the rules artifact actually running
           "test sạch" | python "$tmp\.ai-guard\bin\engine.py" check-prompt --root "$tmp"
           if ($LASTEXITCODE -ne 0) { throw "engine check-prompt exit $LASTEXITCODE" }
           Write-Host "INSTALLER_SMOKE_OK"

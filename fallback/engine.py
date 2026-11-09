@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""ai-guard fallback engine — python mirror của node CLI contract (stdlib only).
+"""ai-guard fallback engine — python mirror of the node CLI contract (stdlib only).
 
-Dùng khi môi trường không có node (hook vẫn chặn được). Contract mirror:
-check-prompt / check-file / allow / self-test, exit codes 0/1/2, audit JSONL
-ngày UTC, bypass store có hash path, English stderr — giống src/cli.ts.
-Builtin rules load từ rules.json cạnh file này (hoặc env AI_GUARD_BUILTIN_RULES);
-dist/rules.json là build artifact do src/scripts/export-rules.ts xuất
+Used when the environment has no node (hooks can still block). Mirrored contract:
+check-prompt / check-file / allow / self-test, exit codes 0/1/2, UTC-dated audit
+JSONL, bypass store with hashed paths, English stderr — same as src/cli.ts.
+Builtin rules are loaded from rules.json next to this file (or env AI_GUARD_BUILTIN_RULES);
+dist/rules.json is a build artifact exported by src/scripts/export-rules.ts
 (exactly 5 fields: id, severity, pattern, description, builtin?).
 """
 
@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 # module-level regexes (mirror src/engine/mask.ts, scanner.ts, check-file.ts)
 # ---------------------------------------------------------------------------
 
-# placeholder là token ngắn do con người đặt; giá trị dài >200 ký tự coi như thật
+# a placeholder is a short human-chosen token; values longer than 200 chars are treated as real
 PLACEHOLDER_RE = re.compile(
     r"^(test|tests|example|examples|sample|samples|dummy|fake|placeholder|"
     r"change[-_]?me|xxx+|\*+|your[-_][a-z0-9_.-]*|"
@@ -32,9 +32,9 @@ PLACEHOLDER_RE = re.compile(
     re.IGNORECASE,
 )
 
-# (?<![a-z0-9]) thay cho \b đầu: cho phép tiền tố "_" trong DB_PASSWORD/MY_API_KEY;
-# ["']? sau \b: hỗ trợ dạng JSON "password": "value" (quote đứng trước dấu hai chấm)
-# re.ASCII: JS \b/\w là ASCII-based — "đAKIA..." phải match giống JS (parity)
+# (?<![a-z0-9]) instead of a leading \b: allows a "_" prefix in DB_PASSWORD/MY_API_KEY;
+# ["']? after \b: supports the JSON form "password": "value" (quote before the colon)
+# re.ASCII: JS \b/\w are ASCII-based — "đAKIA..." must match like JS (parity)
 GENERIC_ASSIGN_RE = re.compile(
     r"(?<![a-z0-9])(passwo?rd|passwd|secret|secret[_-]?key|api[_-]?key|apikey|"
     r"auth[_-]?token|access[_-]?token|client[_-]?secret|admin[_-]?pass)\b"
@@ -42,7 +42,7 @@ GENERIC_ASSIGN_RE = re.compile(
     re.IGNORECASE | re.ASCII,
 )
 
-# apply_patch (Codex): path nằm trong patch text — "*** Update File: <path>" ở header mỗi hunk.
+# apply_patch (Codex): the path is inside the patch text — "*** Update File: <path>" in each hunk header.
 PATCH_FILE_RE = re.compile(r"\*\*\* (?:Update|Add|Delete) File: ([^\n]+)")
 
 TOKEN_CANDIDATE_RE = re.compile(r"[A-Za-z0-9+/_$&!#%-]{20,}")
@@ -89,7 +89,7 @@ def shannon_entropy(s: str) -> float:
 def is_high_entropy(s: str, min_len: int = 20, min_h: float = 3.5) -> bool:
     if len(s) < min_len:
         return False
-    # bỏ token thuần chữ thường giống từ tự nhiên
+    # skip all-lowercase tokens that look like natural words
     if COMMON_WORD_RE.match(s) and shannon_entropy(s) < 4.2:
         return False
     return shannon_entropy(s) >= min_h
@@ -108,7 +108,7 @@ def builtin_rules_path() -> str:
 
 
 def _read_json_safe(path: str):
-    """Đọc JSON fail-open; strip BOM nếu có. Trả None khi không tồn tại/lỗi."""
+    """Read JSON fail-open; strip BOM if present. Returns None when missing/invalid."""
     try:
         if not os.path.exists(path):
             return None
@@ -122,10 +122,10 @@ def _read_json_safe(path: str):
 
 
 def compile_rules(rules: list) -> list:
-    """Compile pattern của từng rule; regex hỏng giữ nguyên (không có 're').
+    """Compile each rule's pattern; an invalid regex is kept as-is (no 're').
 
-    re.ASCII: JS regex không có flag 'u' thì \\b/\\w/\\d là ASCII-based —
-    "đAKIA..." phải match như JS (unicode mode của python sẽ bỏ qua \b đó).
+    re.ASCII: without the 'u' flag JS regex \\b/\\w/\\d are ASCII-based —
+    "đAKIA..." must match like JS (python's unicode mode would skip that \b).
     """
     out = []
     for r in rules:
@@ -174,7 +174,7 @@ def load_rules(root: str) -> list:
             rules = [_apply(r) for r in rules]
 
     compiled = compile_rules(rules)
-    # pattern rỗng (builtin detector) giữ nguyên; pattern hỏng compile thì bỏ
+    # empty pattern (builtin detector) is kept as-is; an invalid pattern that fails to compile is dropped
     return [r for r in compiled if not r.get("pattern") or "re" in r]
 
 
@@ -185,9 +185,9 @@ def load_config(root: str) -> dict:
     sp = cfg.get("sensitivePaths")
     generic = cfg.get("genericSecret")
     entropy = cfg.get("highEntropy")
-    # NOTE: config có thể chứa block "jev" (JEV/OpenJEV decision API) — fallback CỐ TÌNH bỏ qua:
-    # engine này là stdlib-only, no-network, dùng cho môi trường không có node. JEV là feature
-    # optional, cần HTTP, chỉ chạy ở node CLI (src/engine/jev.ts). Bỏ qua ở đây là fail-open đúng.
+    # NOTE: the config may contain a "jev" block (JEV/OpenJEV decision API) — the fallback DELIBERATELY ignores it:
+    # this engine is stdlib-only, no-network, meant for environments without node. JEV is an
+    # optional feature, needs HTTP, and only runs in the node CLI (src/engine/jev.ts). Ignoring it here is correct fail-open.
     return {
         "sensitivePaths": sp if isinstance(sp, list) and sp else list(DEFAULT_SENSITIVE_PATHS),
         "genericSecret": generic if isinstance(generic, bool) else True,
@@ -211,8 +211,8 @@ DEFAULT_SENSITIVE_PATHS = [
 
 
 def normalize_path(p: str) -> str:
-    # strip drive/../ để file NGOÀI project root (relative trả ../..) vẫn match
-    # pattern theo basename — fail-closed
+    # strip drive/../ so files OUTSIDE the project root (relative gives ../..) still match
+    # patterns by basename — fail-closed
     s = p.replace("\\", "/")
     s = re.sub(r"^[a-z]:", "", s, flags=re.IGNORECASE)
     s = re.sub(r"^(\.\./)+", "", s)
@@ -249,7 +249,7 @@ def is_sensitive_path(path: str, patterns: list) -> bool:
         rex = glob_to_regex(pat)
         if rex.search(rel):
             return True
-        # cho pattern không có '/': khớp cả khi file nằm trong subdir
+        # for patterns without '/': also match when the file is in a subdir
         if "/" not in pat:
             base = rel.split("/")[-1]
             if rex.search(base):
@@ -285,8 +285,8 @@ def scan(text: str, rules: list, generic: bool = True, entropy: bool = True) -> 
             if value in seen:
                 continue
             seen.add(value)
-            # ngữ cảnh key (password=/api_key:) đã là tín hiệu mạnh — chỉ chặn
-            # placeholder; KHÔNG entropy gate ở đây (bỏ sót secret lowercase)
+            # key context (password=/api_key:) is already a strong signal — only filter out
+            # placeholders; NO entropy gate here (would miss lowercase secrets)
             if not is_placeholder(value):
                 findings.append({
                     "ruleId": "generic-secret",
@@ -331,7 +331,7 @@ def _iso_from_ms(ms: int) -> str:
 
 
 def append_audit(root: str, evt: dict) -> None:
-    """JSONL theo ngày UTC, fail-open (audit không được làm hỏng hook)."""
+    """JSONL per UTC day, fail-open (auditing must not break the hook)."""
     try:
         d = os.path.join(root, ".ai-guard", "logs")
         os.makedirs(d, exist_ok=True)
@@ -348,7 +348,7 @@ def find_root(start: str):
         p = os.path.abspath(env_root)
         return p if os.path.exists(p) else None
     d = os.path.abspath(start)
-    for _ in range(30):  # giới hạn độ sâu 30 cấp
+    for _ in range(30):  # depth limit of 30 levels
         if os.path.exists(os.path.join(d, ".ai-guard")):
             return d
         parent = os.path.dirname(d)
@@ -378,7 +378,7 @@ def _rm_force(fp: str) -> None:
 
 
 def grant_bypass(root: str, scope: str, path, minutes: int) -> None:
-    """Ghi flag bypass — atomic (tmp + rename) để reader không thấy file nửa vời."""
+    """Write the bypass flag — atomic (tmp + rename) so readers never see a half-written file."""
     d = _bypass_dir(root)
     os.makedirs(d, exist_ok=True)
     now = int(time.time() * 1000)
@@ -398,7 +398,7 @@ def grant_bypass(root: str, scope: str, path, minutes: int) -> None:
 
 
 def has_valid_bypass(root: str, scope: str, path=None) -> bool:
-    """Prune flag hết hạn/corrupt (force-rm) rồi check flag đích còn hiệu lực."""
+    """Prune expired/corrupt flags (force-rm), then check the target flag is still valid."""
     d = _bypass_dir(root)
     try:
         if not os.path.isdir(d):
@@ -450,12 +450,12 @@ def flag_value(argv: list, flag: str):
 def extract_prompt(input_text: str):
     """JSON alias fields (prompt/input/message/text/userPrompt/content) -> else RAW.
 
-    Alias keys theo src/commands/check-prompt.ts nhưng là SUBSET (TS là superset:
-    nested data.prompt|triggerData.prompt của Kiro chỉ có ở TS vì fallback này chỉ
-    phục vụ Claude Code/Codex) — thêm userPrompt/content cho Kiro UserPromptSubmit
-    (user-verified: prompt text findable dưới 1 trong các key đó). JSON hợp lệ nhưng
-    KHÔNG alias field nào là string (hook payload dùng field name lạ) -> quét raw:
-    secret vẫn nằm nguyên văn trong JSON text.
+    Alias keys follow src/commands/check-prompt.ts but are a SUBSET (TS is a superset:
+    Kiro's nested data.prompt|triggerData.prompt exist only in TS since this fallback only
+    serves Claude Code/Codex) — userPrompt/content added for Kiro UserPromptSubmit
+    (user-verified: prompt text is findable under one of those keys). Valid JSON but
+    NO alias field is a string (hook payload uses an unknown field name) -> scan raw:
+    the secret still appears verbatim in the JSON text.
     """
     s = input_text.strip()
     if not s:
@@ -482,7 +482,7 @@ def cmd_check_prompt(args: list, stdin_text: str) -> int:
         return 0
     project_root = find_root(root)
     if project_root is None:
-        return 0  # chưa init -> fail-open
+        return 0  # not initialized -> fail-open
     cfg = load_config(project_root)
     rules = load_rules(project_root)
     findings = scan(prompt, rules, generic=cfg["genericSecret"], entropy=cfg["highEntropy"])
@@ -523,13 +523,13 @@ def cmd_check_prompt(args: list, stdin_text: str) -> int:
 
 
 def extract_path_candidates(argv: list, input_text: str) -> list:
-    """Thu thập path candidates theo thứ tự ưu tiên:
+    """Collect path candidates in priority order:
 
-    1) argv positional — loại giá trị của flag (--flag value), lấy cái cuối.
-    2) stdin JSON: direct field đầu tiên (file_path|notebook_path|path|j.path)
-       — explicit path wins, KHÔNG scan patch.
-    3) nếu không có path tường minh nào: MỌI patch header trong
-       tool_input.input|command|patch (caller chặn candidate sensitive ĐẦU TIÊN).
+    1) argv positional — drop flag values (--flag value), take the last one.
+    2) stdin JSON: first direct field (file_path|notebook_path|path|j.path)
+       — an explicit path wins, do NOT scan the patch.
+    3) if there is no explicit path: EVERY patch header in
+       tool_input.input|command|patch (the caller blocks on the FIRST sensitive candidate).
     """
     flag_vals = set()
     for i, a in enumerate(argv):
@@ -583,7 +583,7 @@ def cmd_check_file(args: list, stdin_text: str) -> int:
         abs_p = raw if os.path.isabs(raw) else os.path.join(project_root, raw)
         try:
             rel_raw = os.path.relpath(abs_p, project_root)
-        except ValueError:  # khác ổ đĩa trên windows
+        except ValueError:  # different drive on windows
             rel_raw = abs_p
         rel = normalize_path(rel_raw or raw)
         if not is_sensitive_path(rel, cfg["sensitivePaths"]):
@@ -612,7 +612,7 @@ def cmd_allow(args: list) -> int:
     root = root_val if root_val is not None else os.getcwd()
     project_root = find_root(root)
     if project_root is None:
-        # no-root hint: máy không-npm chạy installer fallback (chính installer tạo .ai-guard)
+        # no-root hint: non-npm machines run the fallback installer (the installer itself creates .ai-guard)
         sys.stderr.write(
             "ai-guard: no .ai-guard found — run install.sh/install.ps1 (fallback) "
             "or `npx ai-guard init` (npm).\n")
@@ -627,7 +627,7 @@ def cmd_allow(args: list) -> int:
     if minutes_flag is None:
         sys.stderr.write("ai-guard: missing duration, e.g. --5m or --10m\n")
         return 1
-    minutes = int(minutes_flag[2:-1])  # "--5m" -> 5 (regex đã đảm bảo dạng --\d+m)
+    minutes = int(minutes_flag[2:-1])  # "--5m" -> 5 (the regex already guarantees the --\d+m form)
     if not (1 <= minutes <= 1440):
         sys.stderr.write("ai-guard: duration must be between 1 and 1440 minutes (24h)\n")
         return 1
@@ -655,8 +655,8 @@ JWT_TOKEN_SELF = (
     "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
 )
 
-# mirror đủ 9 fixtures của src/selftest-fixtures.ts (engine dùng artifact
-# builtin — installer copy đủ dist/rules.json thì 9/9 pass)
+# mirrors all 9 fixtures of src/selftest-fixtures.ts (the engine uses the builtin
+# artifact — when the installer copies the full dist/rules.json, 9/9 pass)
 SELF_TEST_FIXTURES = [
     {"name": "aws-key", "input": "AKIAIOSFODNN7EXAMPLE",
      "expectRule": "aws-access-key", "expectBlocked": True},
@@ -680,7 +680,7 @@ SELF_TEST_FIXTURES = [
 
 
 def self_test():
-    """Tự kiểm tra engine với fixture built-in (KHÔNG load project rules)."""
+    """Self-check the engine against built-in fixtures (does NOT load project rules)."""
     builtin_raw = _read_json_safe(builtin_rules_path())
     rules = compile_rules(builtin_raw if isinstance(builtin_raw, list) else [])
     failures = []
@@ -714,8 +714,8 @@ def cmd_self_test(args: list) -> int:
 
 COMMANDS = ("check-prompt", "check-file", "allow", "self-test")
 
-# chỉ các lệnh này đọc stdin; các lệnh khác (allow, self-test, ...) phải dispatch
-# ngay nếu không sẽ treo ở TTY chờ EOF
+# only these commands read stdin; other commands (allow, self-test, ...) must dispatch
+# immediately, otherwise they hang on a TTY waiting for EOF
 STDIN_COMMANDS = ("check-prompt", "check-file")
 
 
@@ -731,8 +731,8 @@ def _build_parser() -> argparse.ArgumentParser:
         ("allow", "temporarily allow (bypass) a prompt or file"),
         ("self-test", "run engine self-test with built-in fixtures"),
     ]:
-        # subparser không khai báo argument: phần còn lại của argv được trả về
-        # nguyên vẹn (parse_known_args) để cmd_* tự parse theo contract node
+        # the subparser declares no arguments: the rest of argv is returned
+        # intact (parse_known_args) so cmd_* parse it themselves per the node contract
         sub.add_parser(name, help=helptext)
     return parser
 
@@ -747,11 +747,11 @@ def _read_stdin() -> str:
 
 
 def _reconfigure_streams() -> None:
-    # stdin + stderr — ép utf-8 để không vỡ trên console/pipe cp1252 (prompt
-    # input có thể chứa utf-8 bất kỳ)
-    # (windows). KHÔNG reconfigure stdin thì đọc prompt utf-8 dưới cp1252 ném
-    # UnicodeDecodeError (subclass ValueError) -> fail-open nuốt lỗi -> exit 0
-    # mà KHÔNG quét (silent-skip) — reproducer: PYTHONIOENCODING=cp1252.
+    # stdin + stderr — force utf-8 so nothing breaks on a cp1252 console/pipe (prompt
+    # input may contain arbitrary utf-8)
+    # (windows). Without reconfiguring stdin, reading a utf-8 prompt under cp1252 raises
+    # UnicodeDecodeError (subclass of ValueError) -> fail-open swallows the error -> exit 0
+    # WITHOUT scanning (silent-skip) — reproducer: PYTHONIOENCODING=cp1252.
     for stream in (sys.stdin, sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
@@ -765,7 +765,7 @@ def main(argv=None) -> int:
     parser = _build_parser()
     command = argv[0] if argv else None
     if command in ("-h", "--help"):
-        parser.parse_args(argv)  # in help rồi exit 0
+        parser.parse_args(argv)  # print help then exit 0
     if command not in COMMANDS:
         sys.stderr.write(
             "ai-guard: unknown or missing command. "

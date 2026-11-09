@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ai-guard fallback installer (no npm required). Requires python3.
-# Chạy từ thư mục dự án: bash /path/to/ai-guard/fallback/install.sh
+# Run from the project directory: bash /path/to/ai-guard/fallback/install.sh
 set -euo pipefail
 
 ROOT="$(pwd)"
@@ -25,11 +25,11 @@ GI="$ROOT/.gitignore"
 add_line() { grep -qxF "$1" "$GI" 2>/dev/null || echo "$1" >> "$GI"; }
 add_line "# ai-guard"; add_line ".ai-guard/logs/"; add_line ".ai-guard/.bypass/"
 
-# quote path trong command string — hook chạy qua shell nên quotes resolve đúng (path có space vẫn chạy)
+# quote the path inside the command string — the hook runs via a shell so quotes resolve correctly (paths with spaces still work)
 ENG="python3 \"$ROOT/.ai-guard/bin/engine.py\""
 
-# 3) register hooks — claude-code (.claude/settings.json) + codex (.codex/hooks.json) qua python heredoc
-#    (merge an toàn: backup .aiguard.bak 1 lần, MARKER check không nhân đôi — mirror logic adapter TS)
+# 3) register hooks — claude-code (.claude/settings.json) + codex (.codex/hooks.json) via python heredoc
+#    (safe merge: .aiguard.bak backup once, MARKER check prevents duplicates — mirrors the TS adapter logic)
 REGISTERED=0
 if [ -d "$ROOT/.claude" ]; then
   F="$ROOT/.claude/settings.json"
@@ -64,8 +64,8 @@ if [ -d "$ROOT/.codex" ]; then
   [ -f "$F" ] || echo '{"hooks":{}}' > "$F"
   [ -f "$F.aiguard.bak" ] || cp "$F" "$F.aiguard.bak"
   python3 - "$F" "$ENG" <<'PYEOF'
-# giống claude-code nhưng hooks.json nested {"hooks":{...}};
-# matcher codex: apply_patch + mcp__* (không có tool read|grep|glob lowercase)
+# same as claude-code but hooks.json is nested {"hooks":{...}};
+# codex matcher: apply_patch + mcp__* (no lowercase read|grep|glob tools)
 import json, sys
 path, eng = sys.argv[1], sys.argv[2]
 try:
@@ -89,7 +89,7 @@ PYEOF
   REGISTERED=1
 fi
 
-# 4) guard: chưa thấy tool nào -> warn nhưng vẫn exit 0 (engine đã copy sẵn)
+# 4) guard: no tool found -> warn but still exit 0 (engine already copied)
 if [ "$REGISTERED" -eq 0 ]; then
   echo "ai-guard: WARNING — no .claude/.codex found — make sure you are running from the project root? (engine copied to .ai-guard/bin but no hooks registered)" >&2
 fi
