@@ -26,7 +26,7 @@ export const claudeCodeAdapter: AdapterBase = {
       if (!entriesWithMarker(settings.hooks.PreToolUse, "check-file")) {
         settings.hooks.PreToolUse.push({ matcher: "Read|Glob|Grep", hooks: [{ type: "command", command: CMD_FILE }] });
       }
-      // Atomic install: tính nội dung CLAUDE.md TRƯỚC khi mutate settings.json.
+      // Atomic install: compute the CLAUDE.md content BEFORE mutating settings.json.
       const instruction = opts.instructions
         ? appendMarkedSection(
             join(root, "CLAUDE.md"),

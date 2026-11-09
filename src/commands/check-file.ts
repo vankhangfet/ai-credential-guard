@@ -8,16 +8,17 @@ import { appendAuditEvent } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { flagValue } from "../util/argv";
 
-// apply_patch (Codex): path nằm trong patch text — "*** Update File: <path>" ở header mỗi hunk.
+// apply_patch (Codex): the path lives in the patch text — "*** Update File: <path>" in each hunk header.
 const PATCH_FILE_RE = /\*\*\* (?:Update|Add|Delete) File: ([^\n]+)/g;
 
-// Thu thập path candidates theo thứ tự ưu tiên:
-// 1) argv positional (cuối cùng, như cũ) — CHỈ dùng nó nếu có (giữ semantics cũ).
-// 2) stdin JSON: direct field đầu tiên (file_path|notebook_path|path|j.path) — explicit path wins, KHÔNG scan patch.
-// 3) nếu không có path tường minh nào: MỌI patch header trong tool_input.input|command|patch
-//    (caller chặn candidate sensitive ĐẦU TIÊN — .env ở đâu trong patch cũng bị bắt).
+// Collect path candidates in priority order:
+// 1) argv positional (the last one, as before) — use ONLY that if present (keeps old semantics).
+// 2) stdin JSON: first direct field (file_path|notebook_path|path|j.path) — explicit path wins, NO patch scan.
+// 3) multi-path payloads (Kiro CLI fs_read operations[], paths[] arrays) — return EVERY path.
+// 4) if there is no explicit path: EVERY patch header in tool_input.input|command|patch
+//    (the caller blocks the FIRST sensitive candidate — a .env anywhere in the patch is caught).
 function extractPathCandidates(argv: string[], input: string): string[] {
-  // heuristic: loại giá trị của flag ra khỏi positional — các flag tương lai PHẢI nhận giá trị (dạng --flag value), flag boolean sẽ cần cập nhật đây
+  // heuristic: drop flag values from positionals — future flags MUST take a value (--flag value form); boolean flags would need an update here
   const flagVals = new Set<string>();
   for (let i = 0; i < argv.length; i++) {
     if (argv[i].startsWith("--")) flagVals.add(argv[i + 1]);
@@ -28,11 +29,11 @@ function extractPathCandidates(argv: string[], input: string): string[] {
   if (!s.startsWith("{")) return [];
   try {
     const j = JSON.parse(s);
-    // v1: tool_input.path là thư mục (Grep/Glob base) chỉ chặn nếu chính tên thư mục match pattern; không liệt kê file con
-    // Containers theo thứ tự ưu tiên: tool_input (snake/PascalCase payload — Claude/VS Code/
-    // copilot PreToolUse), toolArgs (camelCase payload — copilot CLI preToolUse, kiểu
-    // "unknown": object hoặc JSON string), data/triggerData (kiro session-context shapes).
-    // String container được JSON.parse thử; parse fail hoặc non-object -> bỏ qua container đó.
+    // v1: a tool_input.path that is a directory (Grep/Glob base) is blocked only if the directory name itself matches a pattern; child files are not enumerated
+    // Containers in priority order: tool_input (snake/PascalCase payload — Claude/VS Code/
+    // copilot PreToolUse, Kiro CLI), toolArgs (camelCase payload — copilot CLI preToolUse, typed
+    // "unknown": object or JSON string), data/triggerData (Kiro IDE session-context shapes).
+    // String containers are tried with JSON.parse; parse failure or non-object -> skip that container.
     const containers = [j?.tool_input, j?.toolArgs, j?.data, j?.triggerData]
       .map((c) => {
         if (typeof c === "string") {
@@ -45,7 +46,26 @@ function extractPathCandidates(argv: string[], input: string): string[] {
       .flatMap((c) => [c.file_path, c.notebook_path, c.filePath, c.path])
       .find((v) => typeof v === "string") ?? (typeof j?.path === "string" ? j.path : undefined);
     if (typeof p === "string") return [p];
-    // không có path tường minh — thu thập TẤT CẢ patch header (first-sensitive-wins ở caller)
+    // Kiro CLI (2.x and 3.x) fs_read: tool_input = { operations: [{ mode, path }, ...] } (no top-level
+    // path); also accept string arrays under paths/file_paths. Return EVERY path (caller blocks the first sensitive one).
+    const multi: string[] = [];
+    for (const c of containers) {
+      for (const key of ["operations", "ops"]) {
+        const ops = c[key];
+        if (Array.isArray(ops)) {
+          for (const op of ops) {
+            const q = (op as Record<string, unknown> | null)?.path ?? (op as Record<string, unknown> | null)?.file_path ?? (op as Record<string, unknown> | null)?.filePath;
+            if (typeof q === "string" && q) multi.push(q);
+          }
+        }
+      }
+      for (const key of ["paths", "file_paths", "filePaths"]) {
+        const arr = c[key];
+        if (Array.isArray(arr)) for (const q of arr) if (typeof q === "string" && q) multi.push(q);
+      }
+    }
+    if (multi.length) return multi;
+    // no explicit path — collect ALL patch headers (first-sensitive-wins in the caller)
     const ti = j?.tool_input ?? {};
     const out: string[] = [];
     for (const key of ["input", "command", "patch"]) {
@@ -77,7 +97,7 @@ export async function checkFile(argv: string[], input: string): Promise<number> 
     const abs = isAbsolute(raw) ? raw : join(projectRoot, raw);
     const rel = normalizePath(relative(projectRoot, abs) || raw);
     if (!isSensitivePath(rel, cfg.sensitivePaths ?? [])) {
-      // không khớp path-gate — để JEV (nếu bật) soi nội dung ở pass sau
+      // does not match the path gate — let JEV (if enabled) inspect the content in a later pass
       jevCandidates.push(rel);
       continue;
     }
@@ -96,8 +116,8 @@ export async function checkFile(argv: string[], input: string): Promise<number> 
     );
     return 2;
   }
-  // JEV / OpenJEV (optional, mặc định tắt): soi NỘI DUNG của file không khớp path-gate, bắt credential
-  // bị ghi nhầm vào file thường (vd src/config.ts). Fail-open: lỗi/timeout/không bật -> không ảnh hưởng.
+  // JEV / OpenJEV (optional, off by default): inspect the CONTENT of files that miss the path gate, catching credentials
+  // accidentally written into ordinary files (e.g. src/config.ts). Fail-open: error/timeout/disabled -> no effect.
   if (cfg.jev?.enabled) {
     const jevCode = await scanCandidatesWithJev(projectRoot, tool, jevCandidates, cfg);
     if (jevCode !== 0) return jevCode;
@@ -105,8 +125,8 @@ export async function checkFile(argv: string[], input: string): Promise<number> 
   return 0;
 }
 
-// Đọc nội dung từng candidate (bỏ qua file không tồn tại / quá lớn / đã bypass), gửi JEV. Finding
-// block -> chặn (exit 2); chỉ warn -> log warned, exit 0. Không bao giờ throw.
+// Read each candidate's content (skip missing / oversized / bypassed files) and send it to JEV. A block
+// finding -> block (exit 2); warn only -> log warned, exit 0. Never throws.
 const JEV_MAX_FILE_BYTES = 256 * 1024;
 async function scanCandidatesWithJev(projectRoot: string, tool: string, rels: string[], cfg: ReturnType<typeof loadConfig>): Promise<number> {
   for (const rel of rels) {
@@ -118,7 +138,7 @@ async function scanCandidatesWithJev(projectRoot: string, tool: string, rels: st
       if (!st.isFile() || st.size === 0 || st.size > JEV_MAX_FILE_BYTES) continue;
       content = readFileSync(abs, "utf8");
     } catch {
-      continue; // không đọc được -> fail-open
+      continue; // unreadable -> fail-open
     }
     const findings = await scanWithJev(content, cfg.jev);
     if (!findings.length) continue;
@@ -143,13 +163,13 @@ async function scanCandidatesWithJev(projectRoot: string, tool: string, rels: st
       );
       return 2;
     }
-    // chỉ warn
+    // warn only
     appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "file", action: "warned", path: rel, rule: first.ruleId, source: "jev", score });
   }
   return 0;
 }
 
-// Trích % confidence jev.ts nhúng trong description -> số 0..1.
+// Extract the % confidence that jev.ts embeds in the description -> number 0..1.
 function parseJevScore(description: string): number | undefined {
   const m = description.match(/\((\d{1,3})% confidence\)/);
   return m ? Math.max(0, Math.min(1, Number(m[1]) / 100)) : undefined;

@@ -7,7 +7,7 @@ const cases: Array<[string, string, boolean]> = [
   ["aws-access-key", "AKIA không đủ dài AKIAIOSFODNN7EXAMP", false],
   ["google-api-key", "AIzaSyA1234567890abcdefghijklmnopqrstuv", true],
   ["openai-api-key", "sk-projabcdefghijklmnopqrstuvwx", true],
-  ["openai-api-key", "sk-ant-api03-fake-key-đủ-dài-abcdefgh", false], // anthropic, không phải openai
+  ["openai-api-key", "sk-ant-api03-fake-key-đủ-dài-abcdefgh", false], // anthropic, not openai
   ["anthropic-key", "sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAA", true],
   ["github-pat", "ghp_1234567890abcdefghijklmnopqrstuvwxyzAB", true],
   ["slack-token", "xoxb-123456789012-1234567890123-abcdefghijklmnopqrstuv", true],
@@ -30,34 +30,34 @@ const cases: Array<[string, string, boolean]> = [
   ["bitbucket-client-secret", "ATabcdefghijklmnopqrstuvwxyz0123456", true],
   ["openai-api-key", "sk-or-v1-abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdef", false],
   ["deepseek-key", "sk-abcdefabcdefabcdefabcdefabcdef12", true],
-  // sentry: public key là 32 hex chuẩn (fixture gốc 34 hex — sửa fixture theo format thật)
+  // sentry: public key is a standard 32 hex (original fixture was 34 hex — fixed to match the real format)
   ["sentry-dsn", "https://1234567890abcdef1234567890abcdef@o12345.ingest.sentry.io/4567890", true],
-  // google refresh token thật sau 1// thường ~100 ký tự (fixture gốc 53 — kéo dài tới 63)
+  // real google refresh tokens after 1// are typically ~100 characters (original fixture was 53 — extended to 63)
   ["google-oauth", "1//0abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", true],
   ["azure-storage", "AccountKey=abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/abcdefghijklmnopqr==", true],
   ["telegram-bot", "110201543:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw", true],
   ["discord-bot", "MTE1NjY5ODY4NTU0Njk4NjYw.GaXyZz.abcdefghijklmnopqrstuvwxyzabcdefghij", true],
-  // login-credential-pair: cặp user(name)/login + password cùng xuất hiện (cả 2 thứ tự)
+  // login-credential-pair: a user(name)/login + password pair appearing together (either order)
   ["login-credential-pair", "please ssh to ubuntu server with user name: root , password: 12345 , ip: 192.168.10.1", true],
   ["login-credential-pair", "connect with password: hunter5 login: admin please", true],
   ["login-credential-pair", "username=admin password=P@ss", true],
-  ["login-credential-pair", "password: 12345", false], // đơn lẻ không phải cặp — generic-secret warn lo
+  ["login-credential-pair", "password: 12345", false], // a lone password is not a pair — generic-secret warn covers it
 ];
 
 describe("builtInRules", () => {
   const compiled = compileRules(builtInRules);
-  it("id không trùng", () => {
+  it("ids are unique", () => {
     const ids = builtInRules.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
   for (const [ruleId, input, shouldMatch] of cases) {
-    it(`${ruleId} ${shouldMatch ? "khớp" : "không khớp"}: ${input.slice(0, 40)}`, () => {
+    it(`${ruleId} ${shouldMatch ? "matches" : "does not match"}: ${input.slice(0, 40)}`, () => {
       const rule = compiled.find((r) => r.id === ruleId);
-      expect(rule, "rule phải tồn tại: " + ruleId).toBeTruthy();
+      expect(rule, "rule must exist: " + ruleId).toBeTruthy();
       expect(!!rule!.re!.test(input)).toBe(shouldMatch);
     });
   }
-  it("đủ 10 nhóm đại diện (≥1 rule mỗi nhóm chính)", () => {
+  it("all 10 representative groups present (≥1 rule per main group)", () => {
     for (const id of ["aws-access-key", "openai-api-key", "github-pat", "slack-token",
       "db-url", "private-key", "jwt", "stripe-live", "gitlab-token", "hf-token"]) {
       expect(compiled.some((r) => r.id === id), id).toBe(true);

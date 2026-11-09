@@ -9,7 +9,7 @@ export const DEFAULT_SENSITIVE_PATHS: string[] = [
 ];
 
 export function normalizePath(p: string): string {
-  // strip drive/../ để file NGOÀI project root (relative trả ../..) vẫn match pattern theo basename — fail-closed
+  // strip drive/../ so files OUTSIDE the project root (relative returns ../..) still match patterns by basename — fail-closed
   return p
     .replace(/\\/g, "/")
     .replace(/^[a-z]:/i, "")
@@ -38,7 +38,7 @@ export function isSensitivePath(path: string, patterns: string[]): boolean {
   for (const pat of patterns) {
     const re = globToRegex(pat);
     if (re.test(rel)) return true;
-    // cho pattern không có '/': khớp cả khi file nằm trong subdir
+    // for patterns without '/': also match when the file is in a subdir
     if (!pat.includes("/")) {
       const base = rel.split("/").pop()!;
       if (re.test(base)) return true;

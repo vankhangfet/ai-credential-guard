@@ -1,26 +1,26 @@
 #!/usr/bin/env node
 // ai-guard hook for Cline — UserPromptSubmit (prompt-side guard).
-// DIVERGENCE vs spec ban đầu ("Cline không có prompt hook"): Cline v3.36 CÓ UserPromptSubmit
-// (payload: prompt text + attachments) — https://cline.bot/blog/cline-v3-36-hooks — nên đăng ký.
+// DIVERGENCE vs the original spec ("Cline has no prompt hook"): Cline v3.36 DOES have UserPromptSubmit
+// (payload: prompt text + attachments) — https://cline.bot/blog/cline-v3-36-hooks — so we register it.
 //   - stdin: JSON — base { clineVersion, hookName, timestamp, taskId, workspaceRoots, userId }
-//     + prompt text (field name chưa được docs cố định -> alias-tolerant: prompt|userPrompt|text|input|message).
-//   - Blocking contract: IN stdout JSON {"cancel":true,"errorMessage":"..."} — KHÔNG dùng exit code.
+//     + prompt text (field name not fixed by the docs -> alias-tolerant: prompt|userPrompt|text|input|message).
+//   - Blocking contract: print stdout JSON {"cancel":true,"errorMessage":"..."} — do NOT use exit code.
 const { spawnSync } = require("node:child_process");
 const { existsSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
 
-// Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
-// `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
-// npx ~6s/call (Windows). Fix: check tên MỚI trước (__dirname/../.. + cwd), giữ tên cũ làm
-// legacy fallback cho alias install (package chưa từng publish dưới tên ai-guard). Chạy process.execPath (binary node đang
-// chạy hook) với resolved cli.js: nhanh hơn npx ~20x và hoạt động trên MỌI platform (kể cả
-// win32 — không cần .cmd, không cần shell). Hook nằm tại <proj>/.clinerules/hooks/ nên tìm từ
-// __dirname/../.. (cwd-independent) + cwd. (hook chạy qua shebang node -> execPath luôn là
-// node runtime, không cần guard). Fallback npx chỉ khi chưa có local install: win32 spawn
-// không tìm được `npx` (batch script) khi tách args -> phải dùng npx.cmd + shell:true
-// (guard() quote sẵn args — xem dưới); posix giữ bare npx như cũ.
+// Fast-path: the npm package is named `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: only checked
+// `node_modules/ai-guard/...` (OLD name) -> a local install never matched, every check cost
+// npx ~6s/call (Windows). Fix: check the NEW name first (__dirname/../.. + cwd), keep the old name as a
+// legacy fallback for alias installs (the package was never published under the name ai-guard). Run process.execPath (the node binary
+// running the hook) with the resolved cli.js: ~20x faster than npx and works on ALL platforms (including
+// win32 — no .cmd, no shell needed). The hook lives at <proj>/.clinerules/hooks/ so search from
+// __dirname/../.. (cwd-independent) + cwd. (the hook runs via the node shebang -> execPath is always the
+// node runtime, no guard needed). npx fallback only when there is no local install: win32 spawn
+// cannot find `npx` (a batch script) with split args -> must use npx.cmd + shell:true
+// (guard() pre-quotes args — see below); posix keeps bare npx as before.
 function resolveCmd() {
-  // Ưu tiên theo BASE trước (gần hook nhất thắng), trong mỗi base tên MỚI trước tên cũ.
+  // Prefer by BASE first (closest to the hook wins); within each base, NEW name before old name.
   for (const base of [join(__dirname, "..", ".."), process.cwd()]) {
     for (const name of ["ai-credential-guard", "ai-guard"]) {
       for (const rel of [join("node_modules", name, "dist", "cli.js"), join("..", "node_modules", name, "dist", "cli.js")]) {
@@ -34,20 +34,20 @@ function resolveCmd() {
     : { cmd: "npx", prefix: ["--no-install", "ai-guard"] };
 }
 
-// Cline blocking contract (blog v3.36): stdout JSON với cancel=true chặn prompt.
+// Cline blocking contract (blog v3.36): stdout JSON with cancel=true blocks the prompt.
 function block(message) {
   process.stdout.write(JSON.stringify({ cancel: true, errorMessage: message }) + "\n");
 }
 
-// Spawns the shared CLI (qua fast-path execPath hoặc fallback npx):
+// Spawns the shared CLI (via the execPath fast-path or npx fallback):
 //   ai-guard check-prompt --tool cline        (stdin: extracted prompt text)
-// Exit code 2 = blocked -> in ra {"cancel":true,...} theo contract chặn của Cline.
-// SECURITY: win32 npx.cmd fallback chạy qua cmd.exe (shell:true) — Node KHÔNG quote từng arg
-// khi shell:true, nên arg từ payload (path/--root) chứa metachars (&, |, >...) sẽ bị cmd.exe
-// THỰC THI (command injection). Xây MỘT chuỗi lệnh đã quote sẵn: token lệnh (index 0) để BARE —
-// quote "npx.cmd" phá self-location của batch wrapper (npm dùng %~dp0); các arg còn lại được
-// double-quote + strip `"` và `%` (chặn cả %VAR% expansion trong quotes) -> metachars chỉ còn
-// là ký tự literal trong arg.
+// Exit code 2 = blocked -> print {"cancel":true,...} per Cline's blocking contract.
+// SECURITY: the win32 npx.cmd fallback runs through cmd.exe (shell:true) — Node does NOT quote each arg
+// when shell:true, so args from the payload (path/--root) containing metachars (&, |, >...) would be
+// EXECUTED by cmd.exe (command injection). Build ONE pre-quoted command string: the command token (index 0) stays BARE —
+// quoting "npx.cmd" breaks the batch wrapper's self-location (npm uses %~dp0); the remaining args are
+// double-quoted + have `"` and `%` stripped (also blocks %VAR% expansion inside quotes) -> metachars become
+// literal characters in the arg.
 function guard(args, input) {
   const { cmd, prefix } = resolveCmd();
   const viaShell = process.platform === "win32" && cmd.endsWith(".cmd");
@@ -67,7 +67,7 @@ function guard(args, input) {
         timeout: 10_000,
       });
   if (r.error) {
-    // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được
+    // fail-open with an audible echo: do not block the workflow, but it must be visible
     console.error("ai-guard: engine failed to run (" + r.error.message + ") — SKIPPING check (fail-open)");
     return;
   }
@@ -76,25 +76,25 @@ function guard(args, input) {
     return;
   }
   if (r.status !== 0) {
-    // engine crash / resolution fail — fail-open nhưng PHẢI thấy được
+    // engine crash / resolution fail — fail-open but it MUST be visible
     console.error("ai-guard: engine exited " + r.status + " — " + (r.stderr || "").trim());
   }
 }
 
 let raw = "";
-try { raw = readFileSync(0, "utf8"); } catch { /* stdin rỗng/TTY -> bỏ qua */ }
+try { raw = readFileSync(0, "utf8"); } catch { /* empty stdin/TTY -> skip */ }
 
 let j = null;
-try { j = JSON.parse(raw); } catch { /* raw text prompt -> forward thẳng */ }
+try { j = JSON.parse(raw); } catch { /* raw text prompt -> forward as-is */ }
 
-// Ưu tiên text tách được từ alias fields; JSON parse được nhưng KHÔNG alias nào match -> fallback
-// quét RAW stdin (prompt text nằm nguyên văn trong JSON — CLI extractPrompt quét raw khi không
-// có alias field, nên secret nhúng trong payload vẫn bị bắt; an toàn hơn là bỏ qua không scan).
+// Prefer text extracted from alias fields; if JSON parses but NO alias matches -> fall back to
+// scanning RAW stdin (the prompt text appears verbatim in the JSON — the CLI's extractPrompt scans raw when there is no
+// alias field, so a secret embedded in the payload is still caught; safer than skipping the scan).
 const text = (j
   ? [j.prompt, j.userPrompt, j.text, j.input, j.message].find(function (v) { return typeof v === "string" && v.trim(); })
   : undefined) ?? raw;
 
-// Payload có workspaceRoots — truyền --root để CLI không phụ thuộc cwd của hook process.
+// Payload has workspaceRoots — pass --root so the CLI does not depend on the hook process cwd.
 const wsRoot =
   Array.isArray(j && j.workspaceRoots) && typeof j.workspaceRoots[0] === "string"
     ? j.workspaceRoots[0]

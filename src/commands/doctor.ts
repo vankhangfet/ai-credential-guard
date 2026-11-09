@@ -1,10 +1,10 @@
-import { allAdapters } from "../adapters"; // import barrel để trigger đăng ký adapter
+import { allAdapters } from "../adapters"; // import barrel to trigger adapter registration
 import { selfTest, printSelfTest } from "./self-test";
 import { findProjectRoot } from "../root";
 import { loadRules, loadConfig } from "../engine/loader";
 import { flagValue } from "../util/argv";
 
-// Kiểm tra sức khoẻ cài đặt: engine self-test -> rules/config -> từng adapter detect được.
+// Installation health check: engine self-test -> rules/config -> each detectable adapter.
 export async function doctor(argv: string[]): Promise<number> {
   const start = flagValue(argv, "--root") ?? process.cwd();
   const root = findProjectRoot(start);
@@ -19,7 +19,7 @@ export async function doctor(argv: string[]): Promise<number> {
   printSelfTest(st, "Engine self-test", "  ");
   if (st.failures.length) allOk = false;
 
-  // 2) rules/config của project
+  // 2) project rules/config
   try {
     const rules = loadRules(root);
     const cfg = loadConfig(root);
@@ -39,7 +39,7 @@ export async function doctor(argv: string[]): Promise<number> {
     console.log("  ✗ failed to load rules/config: " + e);
   }
 
-  // 3) adapters đang dùng trong project
+  // 3) adapters in use in the project
   let detectedCount = 0;
   for (const a of allAdapters()) {
     let detected = false;

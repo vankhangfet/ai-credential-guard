@@ -1,5 +1,5 @@
 export interface InstallOptions {
-  instructions: boolean; // ghi education layer
+  instructions: boolean; // write the education layer
 }
 
 export interface InstallResult {
@@ -10,8 +10,8 @@ export interface InstallResult {
 
 export interface AdapterBase {
   id: string; // "claude-code" | "codex" | ...
-  label: string; // hiển thị: "Claude Code"
-  detect(projectRoot: string): boolean; // tool đang dùng trong project?
+  label: string; // display name: "Claude Code"
+  detect(projectRoot: string): boolean; // is the tool used in the project?
   install(projectRoot: string, opts: InstallOptions): InstallResult;
   uninstall(projectRoot: string): InstallResult;
   doctor(projectRoot: string): { ok: boolean; detail: string };

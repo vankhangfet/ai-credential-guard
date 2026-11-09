@@ -1,14 +1,14 @@
 import type { Finding, JevConfig } from "../types";
 import { maskSecret } from "./mask";
 
-// Tích hợp JEV / OpenJEV (và mọi openjev-server tương thích): một "decision API" nhận unstructured
-// state (text) + danh sách câu hỏi, trả xác suất calibrated (0..1) cho mỗi câu hỏi. Ta hỏi 2 câu:
-//   - credential: text có chứa credential/secret thật không?
-//   - exfiltration: text có phải mưu đồ truy cập file trái phép / rò rỉ / prompt injection không?
-// Mỗi câu có xác suất >= threshold -> sinh 1 Finding (severity = cfg.mode). Module này KHÔNG bao giờ
-// throw ra ngoài: mọi lỗi (mạng, timeout, config, parse) -> trả [] (fail-open) đúng invariant của tool.
+// JEV / OpenJEV integration (and any compatible openjev-server): a "decision API" that takes unstructured
+// state (text) + a list of questions and returns a calibrated probability (0..1) per question. We ask 2 questions:
+//   - credential: does the text contain a real credential/secret?
+//   - exfiltration: is the text an attempt at unauthorized file access / leakage / prompt injection?
+// Each question with probability >= threshold -> yields 1 Finding (severity = cfg.mode). This module NEVER
+// throws: any error (network, timeout, config, parse) -> returns [] (fail-open), matching the tool's invariant.
 
-// Câu hỏi gửi lên decision API. id dùng làm ruleId của Finding (truy vết trong audit log).
+// Questions sent to the decision API. The id is used as the Finding's ruleId (traceable in the audit log).
 const QUESTIONS: { id: string; question: string; yes: string; no: string; description: string }[] = [
   {
     id: "jev-credential",
@@ -26,9 +26,9 @@ const QUESTIONS: { id: string; question: string; yes: string; no: string; descri
   },
 ];
 
-// Payload theo contract System One / Decisions API (POST /v1/systemone):
+// Payload per the System One / Decisions API contract (POST /v1/systemone):
 //   { model, state, questions: { <id>: { type: "noul", instructions, criteria? } } }
-// "noul" = câu hỏi yes/no; response: answers.<id> = { type: "noul", noul: <P(yes) 0..1> }.
+// "noul" = yes/no question; response: answers.<id> = { type: "noul", noul: <P(yes) 0..1> }.
 interface JevRequestQuestion {
   type: "noul";
   instructions: string;
@@ -40,13 +40,13 @@ interface JevRequest {
   questions: Record<string, JevRequestQuestion>;
 }
 
-const DEFAULT_MODEL = "jev-latest"; // model là field bắt buộc của API; user override qua cfg.model
+const DEFAULT_MODEL = "jev-latest"; // model is a required API field; the user can override via cfg.model
 
 /**
- * Chạy decision API JEV trên một đoạn text. Trả Finding[] (có thể rỗng). Không bao giờ throw.
- * @param text   nội dung cần đánh giá (prompt, hoặc nội dung file)
- * @param cfg    JevConfig đã normalize từ loadConfig
- * @param fetchImpl  inject được để test (mặc định global fetch của Node >=20)
+ * Runs the JEV decision API on a piece of text. Returns Finding[] (possibly empty). Never throws.
+ * @param text   content to evaluate (a prompt, or file content)
+ * @param cfg    JevConfig already normalized by loadConfig
+ * @param fetchImpl  injectable for tests (defaults to Node >=20 global fetch)
  */
 export async function scanWithJev(
   text: string,
@@ -81,10 +81,10 @@ export async function scanWithJev(
       body: JSON.stringify(body),
       signal: controller.signal,
     });
-    if (!res.ok) return []; // lỗi HTTP -> fail-open, không chặn
+    if (!res.ok) return []; // HTTP error -> fail-open, do not block
     data = await res.json();
   } catch {
-    return []; // timeout / mạng / JSON lỗi -> fail-open
+    return []; // timeout / network / bad JSON -> fail-open
   } finally {
     clearTimeout(timer);
   }
@@ -97,7 +97,7 @@ export async function scanWithJev(
         ruleId: q.id,
         severity,
         description: `${q.description} (${Math.round(score * 100)}% confidence)`,
-        // không có secret thô để mask — preview là nhãn nguồn + điểm; giữ invariant "không rò giá trị"
+        // no raw secret to mask — the preview is a source label + score; keeps the "never leak the value" invariant
         preview: maskSecret(`jev:${q.id}:${score.toFixed(2)}`),
       });
     }
@@ -105,12 +105,12 @@ export async function scanWithJev(
   return findings;
 }
 
-// Trích xác suất "yes" cho một câu hỏi từ response. Hỗ trợ nhiều shape vì openjev-server và JEV
-// hosted khác nhau về field name. Thứ tự thử:
-//   1) answers/results/decisions/questions: mảng hoặc map keyed theo id, mỗi item có
+// Extract the "yes" probability for a question from the response. Supports multiple shapes because openjev-server
+// and hosted JEV differ in field names. Order tried:
+//   1) answers/results/decisions/questions: array or map keyed by id, each item having
 //      probability | score | confidence | p_yes | probabilities.yes | choice+probability.
-//   2) map trực tiếp id -> number hoặc id -> {…}.
-// Không khớp -> null (bỏ qua câu hỏi đó).
+//   2) direct map id -> number or id -> {…}.
+// No match -> null (that question is skipped).
 function extractYesProbability(data: unknown, id: string): number | null {
   if (!data || typeof data !== "object") return null;
   const root = data as Record<string, unknown>;
@@ -124,7 +124,7 @@ function extractYesProbability(data: unknown, id: string): number | null {
   return null;
 }
 
-// Lấy item ứng với id từ một container (mảng có .id/.question_id/.key, hoặc object keyed theo id).
+// Pick the item matching id from a container (array with .id/.question_id/.key, or an object keyed by id).
 function pickById(container: unknown, id: string): unknown {
   if (Array.isArray(container)) {
     return container.find((x) => {
@@ -140,16 +140,16 @@ function pickById(container: unknown, id: string): unknown {
   return undefined;
 }
 
-// Chuyển một item (number | {probability|score|confidence|p_yes|probabilities{yes}|choice}) -> P(yes).
+// Convert an item (number | {probability|score|confidence|p_yes|probabilities{yes}|choice}) -> P(yes).
 function coerceYesProbability(item: unknown): number | null {
   if (typeof item === "number") return clamp01(item);
   if (!item || typeof item !== "object") return null;
   const o = item as Record<string, unknown>;
 
-  // contract chính thức: { type: "noul", noul: P(yes) }
+  // official contract: { type: "noul", noul: P(yes) }
   if (typeof o.noul === "number" && !Number.isNaN(o.noul)) return clamp01(o.noul);
 
-  // probabilities: {yes: x, no: y} hoặc {"true": x}
+  // probabilities: {yes: x, no: y} or {"true": x}
   const probs = o.probabilities ?? o.scores;
   if (probs && typeof probs === "object") {
     const po = probs as Record<string, unknown>;
@@ -159,16 +159,16 @@ function coerceYesProbability(item: unknown): number | null {
     if (no !== null) return clamp01(1 - no);
   }
 
-  // field xác suất trực tiếp
+  // direct probability field
   const direct = firstNumber(o.p_yes, o.probability, o.score, o.confidence);
   if (direct !== null) {
-    // nếu có choice tường minh và là "no"/false, xác suất đó thuộc về "no" -> đảo
+    // if there is an explicit choice that is "no"/false, the probability belongs to "no" -> invert
     const choice = typeof o.choice === "string" ? o.choice.toLowerCase() : typeof o.answer === "string" ? o.answer.toLowerCase() : undefined;
     if (choice === "no" || choice === "false" || o.answer === false) return clamp01(1 - direct);
     return clamp01(direct);
   }
 
-  // chỉ có boolean choice, không xác suất -> coi yes=1 / no=0
+  // only a boolean choice, no probability -> treat yes=1 / no=0
   if (typeof o.answer === "boolean") return o.answer ? 1 : 0;
   if (typeof o.choice === "string") {
     const c = o.choice.toLowerCase();

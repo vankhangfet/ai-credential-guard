@@ -1,6 +1,6 @@
 import { makeShimAdapter } from "./shim-adapter";
 
-// OpenCode không có config hooks JSON — intercept qua TS plugin shim đặt tại
+// OpenCode has no JSON hooks config — intercepted via a TS plugin shim placed at
 // .opencode/plugins/ai-guard.ts (docs: https://opencode.ai/docs/plugins).
 export const opencodeAdapter = makeShimAdapter({
   id: "opencode",

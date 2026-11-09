@@ -6,7 +6,7 @@ describe("cli smoke", () => {
     const code = await runCli(["version"], "");
     expect(code).toBe(0);
   });
-  it("lệnh lạ exit 1", async () => {
+  it("unknown command exits 1", async () => {
     expect(await runCli(["nope"], "")).toBe(1);
   });
 });

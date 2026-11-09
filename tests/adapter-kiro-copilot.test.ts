@@ -6,15 +6,15 @@ import { kiroAdapter } from "../src/adapters/kiro";
 import { copilotAdapter } from "../src/adapters/copilot";
 
 // Step 0 (verified):
-//  - Kiro (kiro.dev/docs/hooks): hooks = JSON files trong `.kiro/hooks/`, schema
+//  - Kiro (kiro.dev/docs/hooks): hooks = JSON files in `.kiro/hooks/`, schema
 //    { version: "v1", hooks: [{ name, trigger, action: { type: "command", command } }] }.
-//    USER-VERIFIED: trigger "UserPromptSubmit" + command action WORKS — stdin payload có
-//    prompt text (alias keys prompt|userPrompt|message|text|input|content) và exit 2
-//    BLOCKS prompt. ĐÃ FIX (kirodotdev/Kiro#7500): từ IDE >= 1.0.116 PreToolUse command
-//    hooks NHẬN tool_input -> exit 2 chặn THẬT tool call (tool side); IDE cũ hơn fail-open.
+//    USER-VERIFIED: trigger "UserPromptSubmit" + command action WORKS — stdin payload has
+//    prompt text (alias keys prompt|userPrompt|message|text|input|content) and exit 2
+//    BLOCKS prompt. FIXED (kirodotdev/Kiro#7500): since IDE >= 1.0.116 PreToolUse command
+//    hooks RECEIVE tool_input -> exit 2 really blocks the tool call (tool side); older IDEs fail-open.
 //  - Copilot/VS Code (code.visualstudio.com/docs/agent-customization/hooks): project-level hooks
-//    tồn tại — `.github/hooks/*.json` (Local harness, chat.useHooks chỉ gates legacy Local harness; repo .github/hooks do shared Copilot runtime nạp), PreToolUse stdin
-//    có tool_input, exit 2 = block. Chat/prompt-side KHÔNG chặn được -> education layer chính.
+//    exist — `.github/hooks/*.json` (Local harness; chat.useHooks only gates the legacy Local harness; repo .github/hooks is loaded by the shared Copilot runtime), PreToolUse stdin
+//    has tool_input, exit 2 = block. Chat/prompt-side CANNOT block -> education layer is primary.
 const KIRO_HOOK = join(".kiro", "hooks", "ai-guard.json");
 const KIRO_STEERING = join(".kiro", "steering", "security.md");
 const COPILOT_HOOK = join(".github", "hooks", "ai-guard.json");
@@ -25,7 +25,7 @@ describe("kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.11
     expect(kiroAdapter.detect(mkproject({ kiro: true }))).toBe(true);
     expect(kiroAdapter.detect(mkproject({}))).toBe(false);
   });
-  it("install tạo hooks UserPromptSubmit + PreToolUse + steering; idempotent; detail nêu cả 2 hook", () => {
+  it("install creates UserPromptSubmit + PreToolUse hooks + steering; idempotent; detail mentions both hooks", () => {
     const root = mkproject({ kiro: true });
     const r = kiroAdapter.install(root, { instructions: true });
     expect(r.ok).toBe(true);
@@ -42,12 +42,12 @@ describe("kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.11
     expect(byTrigger.UserPromptSubmit.action.command).toContain("check-prompt --tool kiro");
     expect(byTrigger.PreToolUse.action.command).toContain("check-file --tool kiro");
     expect(readFileSync(join(root, KIRO_STEERING), "utf8")).toContain("ai-guard:start");
-    // idempotent: chạy lại không nhân bản hook/section
+    // idempotent: re-running does not duplicate hooks/sections
     kiroAdapter.install(root, { instructions: true });
     expect(JSON.parse(readFileSync(join(root, KIRO_HOOK), "utf8")).hooks).toHaveLength(2);
     expect((readFileSync(join(root, KIRO_STEERING), "utf8").match(/ai-guard:start/g) ?? []).length).toBe(1);
   });
-  it("install --no-instructions chỉ hook; hook lạ chiếm slot -> từ chối (atomic, không ghi steering)", () => {
+  it("install --no-instructions writes hooks only; foreign hook occupying slot -> refused (atomic, no steering written)", () => {
     const root = mkproject({ kiro: true });
     expect(kiroAdapter.install(root, { instructions: false }).ok).toBe(true);
     expect(existsSync(join(root, KIRO_STEERING))).toBe(false);
@@ -62,14 +62,14 @@ describe("kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.11
     expect(JSON.parse(readFileSync(join(root2, KIRO_HOOK), "utf8")).hooks[0].name).toBe("mine");
     expect(existsSync(join(root2, KIRO_STEERING))).toBe(false);
   });
-  it("uninstall gỡ hook của mình, GIỮ steering (education)", () => {
+  it("uninstall removes own hooks, KEEPS steering (education)", () => {
     const root = mkproject({ kiro: true });
     kiroAdapter.install(root, { instructions: true });
     expect(kiroAdapter.uninstall(root).ok).toBe(true);
     expect(existsSync(join(root, KIRO_HOOK))).toBe(false);
     expect(existsSync(join(root, KIRO_STEERING))).toBe(true);
   });
-  it("doctor: trước install fail; sau install ok — detail nêu prompt + tool side (1.0.116)", () => {
+  it("doctor: fail before install; ok after install — detail mentions prompt + tool side (1.0.116)", () => {
     const root = mkproject({ kiro: true });
     const before = kiroAdapter.doctor(root);
     expect(before.ok).toBe(false);
@@ -81,15 +81,15 @@ describe("kiro adapter (prompt-blocking hook + tool-blocking hook (IDE >= 1.0.11
     expect(after.detail).toContain("1.0.116");
     expect(after.detail).toContain("1.0.293");
     expect(after.detail).toContain("kirodotdev/Kiro#7500");
-    // Fix 3 (coordinator): doctor nêu trạng thái steering (ok-logic không đổi)
+    // Fix 3 (coordinator): doctor reports steering status (ok-logic unchanged)
     expect(after.detail).toContain("missing steering");
     kiroAdapter.install(root, { instructions: true });
     expect(kiroAdapter.doctor(root).detail).toContain("steering security.md");
   });
-  it("doctor: hook file cũ chỉ có PreToolUse (thiếu UserPromptSubmit) -> not ok; re-install sửa", () => {
+  it("doctor: old hook file with only PreToolUse (missing UserPromptSubmit) -> not ok; re-install fixes", () => {
     const root = mkproject({ kiro: true });
     mkdirSync(join(root, ".kiro", "hooks"), { recursive: true });
-    // format <=1.0.x: chỉ entry PreToolUse của ai-guard (command có marker "ai-guard")
+    // format <=1.0.x: only ai-guard's PreToolUse entry (command has marker "ai-guard")
     writeFileSync(join(root, KIRO_HOOK), JSON.stringify(
       {
         version: "v1",
@@ -111,7 +111,7 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     expect(copilotAdapter.detect(mkproject({ vscode: true }))).toBe(true);
     expect(copilotAdapter.detect(mkproject({}))).toBe(false);
   });
-  it("install tạo hook version:1 (PreToolUse chặn + userPromptSubmitted warn-only) + copilot-instructions; idempotent", () => {
+  it("install creates version:1 hook (blocking PreToolUse + warn-only userPromptSubmitted) + copilot-instructions; idempotent", () => {
     const root = mkproject({ vscode: true });
     const r = copilotAdapter.install(root, { instructions: true });
     expect(r.ok).toBe(true);
@@ -130,20 +130,20 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     expect(JSON.parse(readFileSync(join(root, COPILOT_HOOK), "utf8")).hooks.userPromptSubmitted).toHaveLength(1);
     expect((readFileSync(join(root, COPILOT_INSTR), "utf8").match(/ai-guard:start/g) ?? []).length).toBe(1);
   });
-  it("install --no-instructions chỉ hook (không tạo copilot-instructions.md)", () => {
+  it("install --no-instructions writes hooks only (does not create copilot-instructions.md)", () => {
     const root = mkproject({ vscode: true });
     expect(copilotAdapter.install(root, { instructions: false }).ok).toBe(true);
     expect(existsSync(join(root, COPILOT_INSTR))).toBe(false);
     expect(existsSync(join(root, COPILOT_HOOK))).toBe(true);
   });
-  it("uninstall: file instructions chỉ của ta -> xóa hẳn; có content user -> giữ phần user; gỡ hook", () => {
-    // trường hợp 1: file do ta tạo (chỉ có section của ai-guard) -> xóa file luôn
+  it("uninstall: instructions file only ours -> deleted; has user content -> keep user part; removes hook", () => {
+    // case 1: file created by us (only the ai-guard section) -> delete the file
     const root = mkproject({ vscode: true });
     copilotAdapter.install(root, { instructions: true });
     expect(copilotAdapter.uninstall(root).ok).toBe(true);
     expect(existsSync(join(root, COPILOT_INSTR))).toBe(false);
     expect(existsSync(join(root, COPILOT_HOOK))).toBe(false);
-    // trường hợp 2: user có content riêng + section của ta -> bỏ section, giữ content user
+    // case 2: user has own content + our section -> remove section, keep user content
     const root2 = mkproject({ vscode: true });
     mkdirSync(join(root2, ".github"), { recursive: true });
     writeFileSync(join(root2, COPILOT_INSTR), "# Team rules\n\nAlways use pnpm.\n");
@@ -153,7 +153,7 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     expect(rest).toContain("Always use pnpm.");
     expect(rest).not.toContain("ai-guard:start");
   });
-  it("doctor: thiếu -> not ok; sau install -> ok + nêu warn-only không chặn được prompt", () => {
+  it("doctor: missing -> not ok; after install -> ok + states warn-only cannot block prompts", () => {
     const root = mkproject({ vscode: true });
     expect(copilotAdapter.doctor(root).ok).toBe(false);
     copilotAdapter.install(root, { instructions: true });
@@ -163,10 +163,10 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     expect(d.detail).toContain("cannot block");
     expect(d.detail).toContain("warn");
   });
-  it("doctor: hook file legacy (không version:1, không prompt entry) -> not ok, re-install sửa", () => {
+  it("doctor: legacy hook file (no version:1, no prompt entry) -> not ok, re-install fixes", () => {
     const root = mkproject({ vscode: true });
     mkdirSync(join(root, ".github", "hooks"), { recursive: true });
-    // format <=1.1.x: chỉ PreToolUse, không có "version"
+    // format <=1.1.x: PreToolUse only, no "version"
     writeFileSync(join(root, COPILOT_HOOK), JSON.stringify(
       { hooks: { PreToolUse: [{ type: "command", command: "npx --no-install ai-guard check-file --tool copilot" }] } },
       null,
@@ -178,7 +178,7 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     copilotAdapter.install(root, { instructions: true });
     expect(copilotAdapter.doctor(root).ok).toBe(true);
   });
-  it("doctor: prompt entry thiếu --warn-only -> not ok (tránh false 'blocked' telemetry)", () => {
+  it("doctor: prompt entry missing --warn-only -> not ok (avoids false 'blocked' telemetry)", () => {
     const root = mkproject({ vscode: true });
     mkdirSync(join(root, ".github", "hooks"), { recursive: true });
     writeFileSync(join(root, COPILOT_HOOK), JSON.stringify(
@@ -198,22 +198,22 @@ describe("copilot adapter (education layer + agent hooks)", () => {
     copilotAdapter.install(root, { instructions: true });
     expect(copilotAdapter.doctor(root).ok).toBe(true);
   });
-  it("doctor: hook file JSON hỏng (có marker) -> not ok, re-run install", () => {
+  it("doctor: corrupt JSON hook file (has marker) -> not ok, re-run install", () => {
     const root = mkproject({ vscode: true });
     mkdirSync(join(root, ".github", "hooks"), { recursive: true });
-    writeFileSync(join(root, COPILOT_HOOK), '{ "ai-guard": tru'); // chứa "ai-guard" (marker) nhưng không parse được
+    writeFileSync(join(root, COPILOT_HOOK), '{ "ai-guard": tru'); // contains "ai-guard" (marker) but is unparseable
     const d = copilotAdapter.doctor(root);
     expect(d.ok).toBe(false);
     expect(d.detail).toContain("re-run install");
   });
-  it("detect: Copilot CLI only (không .vscode) — detect qua artifact, doctor xanh sau install", () => {
-    const root = mkproject({}); // KHÔNG có .vscode
+  it("detect: Copilot CLI only (no .vscode) — detected via artifact, doctor green after install", () => {
+    const root = mkproject({}); // NO .vscode
     expect(copilotAdapter.detect(root)).toBe(false);
     expect(copilotAdapter.install(root, { instructions: true }).ok).toBe(true);
     expect(copilotAdapter.detect(root)).toBe(true);
     expect(copilotAdapter.doctor(root).ok).toBe(true);
   });
-  it("detect: chỉ còn instructions artifact (hook đã xóa) -> vẫn true", () => {
+  it("detect: only instructions artifact remains (hook deleted) -> still true", () => {
     const root = mkproject({});
     copilotAdapter.install(root, { instructions: true });
     rmSync(join(root, COPILOT_HOOK));

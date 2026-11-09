@@ -9,8 +9,8 @@ interface CodexHooks { description?: string; hooks?: Record<string, HookEntry[]>
 const CMD_PROMPT = "npx --no-install ai-guard check-prompt --tool codex";
 const CMD_FILE = "npx --no-install ai-guard check-file --tool codex";
 
-// Codex tool names (docs chính thức): file edits qua `apply_patch` (matcher nhận alias Edit|Write),
-// MCP tools theo tên đầy đủ `mcp__filesystem__read_file`... — không có tool "read|grep|glob" lowercase.
+// Codex tool names (official docs): file edits go through `apply_patch` (matcher accepts the Edit|Write alias),
+// MCP tools use their full name `mcp__filesystem__read_file`... — there is no lowercase "read|grep|glob" tool.
 const FILE_MATCHER = "Edit|Write|apply_patch|mcp__.*";
 
 export const codexAdapter: AdapterBase = {
@@ -30,7 +30,7 @@ export const codexAdapter: AdapterBase = {
       if (!entriesWithMarker(cfg.hooks.PreToolUse, "check-file")) {
         cfg.hooks.PreToolUse.push({ matcher: FILE_MATCHER, hooks: [{ type: "command", command: CMD_FILE }] });
       }
-      // Atomic install: tính nội dung AGENTS.md TRƯỚC khi mutate hooks.json.
+      // Atomic install: compute the AGENTS.md content BEFORE mutating hooks.json.
       const instruction = opts.instructions
         ? appendMarkedSection(
             join(root, "AGENTS.md"),

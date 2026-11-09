@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Shebang BẮT BUỘC: npm chỉ sinh shim (.cmd/.ps1/sh) gọi `node <bin>` khi file bin có shebang.
-// Thiếu nó, Windows shim chạy cli.js trực tiếp (im lặng exit 0 — hook không bao giờ chạy),
-// còn POSIX shim exec file thô → sh parse JS → exit 2 (chặn mọi prompt).
+// Shebang REQUIRED: npm only generates shims (.cmd/.ps1/sh) that call `node <bin>` when the bin file has a shebang.
+// Without it, the Windows shim runs cli.js directly (silently exits 0 — the hook never runs),
+// while the POSIX shim execs the raw file → sh parses JS → exit 2 (blocks every prompt).
 
 export async function runCli(argv: string[], input: string): Promise<number> {
   const command = argv[0];
   switch (command) {
     case "version":
-      console.log("ai-guard 1.3.0");
+      console.log("ai-guard 1.3.1");
       return 0;
     case "check-prompt":
       return (await import("./commands/check-prompt")).checkPrompt(argv.slice(1), input);
@@ -35,8 +35,8 @@ export async function runCli(argv: string[], input: string): Promise<number> {
   }
 }
 
-// chỉ các lệnh này đọc stdin; các lệnh khác (allow, version, ...) phải dispatch ngay
-// nếu không sẽ treo ở TTY chờ EOF
+// only these commands read stdin; other commands (allow, version, ...) must dispatch immediately
+// otherwise they would hang on the TTY waiting for EOF
 export const STDIN_COMMANDS = new Set(["check-prompt", "check-file"]);
 
 if (require.main === module) {

@@ -7,27 +7,27 @@
 //     the call (handler failure also blocks, as fail-safe). read/edit/write schemas pass the
 //     target as input.path.
 //   - before_agent_start: { prompt } — raw user prompt text (after expansion); types define no
-//     block result for this event, nên prompt-side throw là best-effort (như chat.message của opencode).
+//     block result for this event, so a prompt-side throw is best-effort (like opencode's chat.message).
 // Runs under Bun/node (Pi loads TS directly) — node:child_process is supported.
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { basename, join } from "node:path";
 
-// Fast-path: package npm tên `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: chỉ check
-// `node_modules/ai-guard/...` (tên CŨ) -> local install không bao giờ match, mọi check trả
-// npx ~6s/call (Windows). Fix: check tên MỚI trước (plugin-dir + cwd), giữ tên cũ làm legacy
-// fallback cho alias install (package chưa từng publish dưới tên ai-guard).
-// LƯU Ý base: plugin-dir base chỉ live dưới Bun (opencode); dưới jiti loader của pi (import.meta.dir undefined) base đó inert — cwd base mới là base hiệu dụng.
-// Runtime guard (mirror opencode-shim v3): chỉ dùng process.execPath khi basename là JS runtime
-// (node|bun|deno) — tránh trường hợp host là compiled executable (execPath trỏ về chính nó);
-// khi đó thử Bun.which, còn lại npx fallback.
+// Fast-path: the npm package is named `ai-credential-guard` (bin `ai-guard`). Bug <=1.1.0: only checked
+// `node_modules/ai-guard/...` (OLD name) -> a local install never matched, every check cost
+// npx ~6s/call (Windows). Fix: check the NEW name first (plugin-dir + cwd), keep the old name as a legacy
+// fallback for alias installs (the package was never published under the name ai-guard).
+// NOTE on bases: the plugin-dir base only works under Bun (opencode); under pi's jiti loader (import.meta.dir undefined) that base is inert — the cwd base is the effective one.
+// Runtime guard (mirror opencode-shim v3): only use process.execPath when its basename is a JS runtime
+// (node|bun|deno) — avoids the case where the host is a compiled executable (execPath points to itself);
+// in that case try Bun.which, otherwise npx fallback.
 function resolveCmd(): { cmd: string; prefix: string[] } {
   let runtime: string | undefined = /node|bun|deno/i.test(basename(process.execPath)) ? process.execPath : undefined;
   if (!runtime) {
     const bun = (globalThis as any).Bun;
     if (bun?.which) runtime = bun.which("node") ?? bun.which("bun") ?? undefined;
   }
-  const pluginDir = (import.meta as any).dir; // Bun/vitest: dir của file này; plain node ESM: undefined
+  const pluginDir = (import.meta as any).dir; // Bun/vitest: dir of this file; plain node ESM: undefined
   const bases = [typeof pluginDir === "string" ? join(pluginDir, "..", "..") : "", process.cwd()];
   if (runtime) {
     for (const base of bases) {
@@ -43,16 +43,16 @@ function resolveCmd(): { cmd: string; prefix: string[] } {
     : { cmd: "npx", prefix: ["--no-install", "ai-guard"] };
 }
 
-// Spawns the shared CLI (qua fast-path execPath hoặc fallback npx):
+// Spawns the shared CLI (via the execPath fast-path or npx fallback):
 //   ai-guard check-file --tool <tool> <path>   (tool-side)
 //   ai-guard check-prompt --tool <tool>        (prompt-side)
-// Exit code 2 = blocked -> throw để caller chặn theo cơ chế của event tương ứng.
-// SECURITY: win32 npx.cmd fallback chạy qua cmd.exe (shell:true) — Node KHÔNG quote từng arg
-// khi shell:true, nên arg từ payload (path/--root) chứa metachars (&, |, >...) sẽ bị cmd.exe
-// THỰC THI (command injection). Xây MỘT chuỗi lệnh đã quote sẵn: token lệnh (index 0) để BARE —
-// quote "npx.cmd" phá self-location của batch wrapper (npm dùng %~dp0); các arg còn lại được
-// double-quote + strip `"` và `%` (chặn cả %VAR% expansion trong quotes) -> metachars chỉ còn
-// là ký tự literal trong arg.
+// Exit code 2 = blocked -> throw so the caller blocks via the mechanism of the corresponding event.
+// SECURITY: the win32 npx.cmd fallback runs through cmd.exe (shell:true) — Node does NOT quote each arg
+// when shell:true, so args from the payload (path/--root) containing metachars (&, |, >...) would be
+// EXECUTED by cmd.exe (command injection). Build ONE pre-quoted command string: the command token (index 0) stays BARE —
+// quoting "npx.cmd" breaks the batch wrapper's self-location (npm uses %~dp0); the remaining args are
+// double-quoted + have `"` and `%` stripped (also blocks %VAR% expansion inside quotes) -> metachars become
+// literal characters in the arg.
 function guard(args: string[], input?: string): void {
   const { cmd, prefix } = resolveCmd();
   const viaShell = process.platform === "win32" && cmd.endsWith(".cmd");
@@ -72,21 +72,21 @@ function guard(args: string[], input?: string): void {
         timeout: 10_000,
       });
   if (r.error) {
-    // fail-open có tiếng vọng: không chặn workflow, nhưng phải thấy được
+    // fail-open with an audible echo: do not block the workflow, but it must be visible
     console.error("ai-guard: engine failed to run (" + r.error.message + ") — SKIPPING check (fail-open)");
     return;
   }
   if (r.status === 2) throw new Error((r.stderr || "ai-guard: blocked").trim());
   if (r.status !== 0) {
-    // engine crash / resolution fail — fail-open nhưng PHẢI thấy được
+    // engine crash / resolution fail — fail-open but it MUST be visible
     console.error("ai-guard: engine exited " + r.status + " — " + (r.stderr || "").trim());
     return;
   }
 }
 
 // Extension shape per docs: file exports a default factory receiving ExtensionAPI.
-// Left untyped on purpose — template phải chạy standalone không cần dependency
-// vào package @earendil-works/pi-coding-agent.
+// Left untyped on purpose — the template must run standalone without a dependency
+// on the @earendil-works/pi-coding-agent package.
 export default function (pi: any) {
   // event.toolName = "read" | "edit" | "write" | "bash" | ... ; event.input = tool args (mutable).
   // File tools pass the target as input.path (verified tool schemas); fallbacks cover aliases.
@@ -100,15 +100,15 @@ export default function (pi: any) {
           JSON.stringify({ tool: event?.toolName ?? "pi", path, op: "read" }),
         );
       } catch (e) {
-        // Blocked (exit 2) -> chặn tool qua ToolCallEventResult chính thức của Pi.
+        // Blocked (exit 2) -> block the tool via Pi's official ToolCallEventResult.
         return { block: true, reason: e instanceof Error ? e.message : String(e) };
       }
     }
     return undefined;
   });
   // Fired after user submits prompt but before agent loop. event.prompt = raw text.
-  // lưu ý: before_agent_start không có block result trong types — throw là best-effort
-  // (docs chỉ chứng minh fail-safe handler failure cho tool_call).
+  // note: before_agent_start has no block result in the types — throw is best-effort
+  // (the docs only prove fail-safe handler failure for tool_call).
   pi.on("before_agent_start", async (event: any) => {
     const text: string = typeof event?.prompt === "string" ? event.prompt : "";
     if (text.trim()) guard(["check-prompt", "--tool", "pi"], text);

@@ -1,11 +1,11 @@
 import { rmSync } from "node:fs";
 import { join } from "node:path";
-import { allAdapters } from "../adapters"; // import barrel để trigger đăng ký adapter
+import { allAdapters } from "../adapters"; // import barrel to trigger adapter registration
 import { findProjectRoot } from "../root";
 import { flagValue } from "../util/argv";
 
-// Gỡ hook ai-guard khỏi mọi adapter đang detect được trong project.
-// Mặc định giữ lại .ai-guard/ (config + audit log); --purge xóa hẳn thư mục này.
+// Remove ai-guard hooks from every adapter detected in the project.
+// By default keeps .ai-guard/ (config + audit log); --purge deletes this directory entirely.
 export async function uninstall(argv: string[]): Promise<number> {
   const start = flagValue(argv, "--root") ?? process.cwd();
   const purge = argv.includes("--purge");

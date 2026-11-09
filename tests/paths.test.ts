@@ -19,17 +19,17 @@ describe("isSensitivePath", () => {
     });
   }
   for (const p of ok) {
-    it(`bình thường: ${p}`, () => {
+    it(`normal: ${p}`, () => {
       expect(isSensitivePath(p, DEFAULT_SENSITIVE_PATHS)).toBe(false);
     });
   }
-  it("chuẩn hóa \\ -> / trên Windows", () => {
+  it("normalizes \\ -> / on Windows", () => {
     expect(isSensitivePath("certs\\prod.pem", DEFAULT_SENSITIVE_PATHS)).toBe(true);
   });
-  it("id_rsa.txt.readme là sensitive (prefix id_rsa)", () => {
+  it("id_rsa.txt.readme is sensitive (id_rsa prefix)", () => {
     expect(isSensitivePath("id_rsa.txt.readme", DEFAULT_SENSITIVE_PATHS)).toBe(true);
   });
-  it("drive letter và ../ bị strip trong normalizePath", () => {
+  it("drive letter and ../ are stripped in normalizePath", () => {
     expect(normalizePath("C:\\proj\\secrets\\x.key")).toBe("proj/secrets/x.key");
     expect(normalizePath("../../outside/.env")).toBe("outside/.env");
   });

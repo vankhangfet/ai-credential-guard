@@ -1,12 +1,12 @@
 name: Release
 
-# Tự động khi một GitHub Release được publish (từ tag vX.Y.Z)
+# Runs automatically when a GitHub Release is published (from tag vX.Y.Z)
 on:
   release:
     types: [published]
 
 permissions:
-  contents: write # để upload asset (fallback zip) vào release
+  contents: write # to upload the asset (fallback zip) to the release
 
 jobs:
   publish-npm:
@@ -14,8 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
-      # JOB-level env — steps.if ĐỌC ĐƯỢC (env cấp step thì không;
-      # secrets context không hợp lệ trong steps.if)
+      # JOB-level env — readable in steps.if (step-level env is not;
+      # the secrets context is not valid in steps.if)
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4

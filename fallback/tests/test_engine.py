@@ -1,9 +1,9 @@
-"""Contract-level tests cho fallback/engine.py — python mirror của node CLI.
+"""Contract-level tests for fallback/engine.py — python mirror of the node CLI.
 
-Phần CLI chạy qua subprocess (exit codes, stderr, audit JSONL, bypass store);
-phần unit (is_placeholder/mask) import module trực tiếp từ file path.
-Builtin rules KHÔNG lấy từ dist (build artifact) — test tự tạo artifact nhỏ
-và trỏ env AI_GUARD_BUILTIN_RULES vào nó (installer Task 25 sẽ copy dist/rules.json).
+The CLI part runs via subprocess (exit codes, stderr, audit JSONL, bypass store);
+the unit part (is_placeholder/mask) imports the module directly from its file path.
+Builtin rules are NOT taken from dist (build artifact) — the test builds a small artifact
+and points env AI_GUARD_BUILTIN_RULES at it (installer Task 25 will copy dist/rules.json).
 """
 
 import importlib.util
@@ -27,8 +27,8 @@ JWT_TOKEN = (
 )
 CLEAN_PROMPT = "viết cho tôi hàm quicksort bằng typescript"
 
-# artifact test tự tạo — patterns copy nguyên vẹn từ dist/rules.json; đủ rule
-# cho 9 fixture self-test + 2 builtin detector (pattern rỗng)
+# self-built test artifact — patterns copied verbatim from dist/rules.json; enough rules
+# for the 9 self-test fixtures + 2 builtin detectors (empty pattern)
 RULES_ARTIFACT = [
     {"id": "aws-access-key", "severity": "block",
      "pattern": r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b", "description": "AWS Access Key ID"},
@@ -39,8 +39,8 @@ RULES_ARTIFACT = [
      "pattern": r"\b(?:gh[pousr]_|github_pat_)[A-Za-z0-9_]{22,}\b",
      "description": "GitHub personal access token"},
     {"id": "db-url", "severity": "block",
-     # non-raw string: raw-string r"...\"..." sẽ giữ backslash trong class, lệch
-     # verbatim so với src — username class [^\s:@/"'], password class [^\s@/"']
+     # non-raw string: a raw string r"...\"..." would keep the backslash in the class, drifting from
+     # src verbatim — username class [^\s:@/"'], password class [^\s@/"']
      "pattern": "\\b(?:mysql|postgres|postgresql|mongodb(?:\\+srv)?|redis|rediss|mssql|amqps?|ibmdb)://[^\\s:@/\"']+:[^\\s@/\"']+@",
      "description": "DB connection string with password"},
     {"id": "slack-token", "severity": "block",
@@ -56,7 +56,7 @@ RULES_ARTIFACT = [
      "description": "Secret value assigned to password/secret/api_key", "builtin": "generic-secret"},
     {"id": "high-entropy", "severity": "warn", "pattern": "",
      "description": "High-entropy token likely a secret", "builtin": "high-entropy"},
-    # triple-quoted raw: pattern chứa cả ' lẫn " — giữ verbatim như dist/rules.json
+    # triple-quoted raw: the pattern contains both ' and " — kept verbatim like dist/rules.json
     {"id": "login-credential-pair", "severity": "block",
      "pattern": r'''(?<![a-z0-9])(?:[Uu]ser(?:[ _-]?[Nn]ame)?|[Ll]ogin)\s*[:=@]\s*[^\s,;'"&]{1,64}[^.]{0,120}?(?<![a-z0-9])(?:[Pp]asswo?rd|[Pp]asswd)\s*[:=@]\s*[^\s,;'"&]{1,64}|(?<![a-z0-9])(?:[Pp]asswo?rd|[Pp]asswd)\s*[:=@]\s*[^\s,;'"&]{1,64}[^.]{0,120}?(?<![a-z0-9])(?:[Uu]ser(?:[ _-]?[Nn]ame)?|[Ll]ogin)\s*[:=@]\s*[^\s,;'"&]{1,64}''',
      "description": "Username + password credential pair (login context)"},
@@ -84,7 +84,7 @@ def load_engine_module():
 
 
 class EngineCliTests(unittest.TestCase):
-    """Contract-level qua subprocess — exit codes, English stderr, audit, bypass."""
+    """Contract-level via subprocess — exit codes, English stderr, audit, bypass."""
 
     @classmethod
     def setUpClass(cls):
@@ -158,16 +158,16 @@ class EngineCliTests(unittest.TestCase):
         self.assertIn("ai-guard", r.stderr)
         blocked = [e for e in self.audit_events()
                    if e.get("event") == "prompt" and e.get("action") == "blocked"]
-        self.assertTrue(blocked, msg="thiếu audit blocked")
+        self.assertTrue(blocked, msg="missing audit blocked")
         self.assertEqual(blocked[0].get("rule"), "aws-access-key")
         self.assertNotEqual(blocked[0].get("preview"), AWS_KEY)
         self.assertNotIn(AWS_KEY, self.audit_raw_text())
 
-    # -- 2b. kiro UserPromptSubmit payload: prompt nằm dưới key "userPrompt" --
+    # -- 2b. kiro UserPromptSubmit payload: prompt lives under key "userPrompt" --
 
     def test_userprompt_alias_key_blocks(self):
-        # Kiro UserPromptSubmit (user-verified): stdin payload có prompt text dưới
-        # key "userPrompt" — extract_prompt phải lấy đúng field rồi block (rc 2).
+        # Kiro UserPromptSubmit (user-verified): the stdin payload has the prompt text under
+        # key "userPrompt" — extract_prompt must pick the right field and then block (rc 2).
         r = self.check_prompt(json.dumps({"userPrompt": AWS_KEY}))
         self.assertEqual(r.returncode, 2, msg=r.stdout + r.stderr)
         self.assertIn("BLOCKED", r.stderr)
@@ -182,7 +182,7 @@ class EngineCliTests(unittest.TestCase):
         self.assertEqual(r.returncode, 0, msg=r.stderr)
         warned = [e for e in self.audit_events()
                   if e.get("event") == "prompt" and e.get("action") == "warned"]
-        self.assertTrue(warned, msg="thiếu audit warned")
+        self.assertTrue(warned, msg="missing audit warned")
         self.assertEqual(warned[0].get("rule"), "jwt")
 
     # -- 4. allow prompt bypass ---------------------------------------------
@@ -196,7 +196,7 @@ class EngineCliTests(unittest.TestCase):
         self.assertEqual(r2.returncode, 0, msg=r2.stderr)
         allowed = [e for e in self.audit_events()
                    if e.get("event") == "prompt" and e.get("action") == "allowed_after_confirm"]
-        self.assertTrue(allowed, msg="thiếu audit allowed_after_confirm")
+        self.assertTrue(allowed, msg="missing audit allowed_after_confirm")
 
     # -- 5. invalid duration -------------------------------------------------
 
@@ -215,20 +215,20 @@ class EngineCliTests(unittest.TestCase):
                    if e.get("event") == "file" and e.get("action") == "blocked"]
         self.assertEqual(blocked[0].get("path"), ".env")
 
-        # bypass cho file KHÁC không mở khóa .env
+        # a bypass for a DIFFERENT file does not unlock .env
         r_other = self.run_engine(["allow", "file", "secrets/prod.key", "--10m", "--root", str(self.proj)])
         self.assertEqual(r_other.returncode, 0, msg=r_other.stderr)
         r_still = self.run_engine(["check-file", ".env", "--root", str(self.proj)])
         self.assertEqual(r_still.returncode, 2, msg=r_still.stdout + r_still.stderr)
 
-        # bypass đúng file -> mở khóa
+        # bypass for the right file -> unlocks
         r_grant = self.run_engine(["allow", "file", ".env", "--10m", "--root", str(self.proj)])
         self.assertEqual(r_grant.returncode, 0, msg=r_grant.stderr)
         r_ok = self.run_engine(["check-file", ".env", "--root", str(self.proj)])
         self.assertEqual(r_ok.returncode, 0, msg=r_ok.stderr)
         allowed = [e for e in self.audit_events()
                    if e.get("event") == "file" and e.get("action") == "allowed_after_confirm"]
-        self.assertTrue(allowed, msg="thiếu audit allowed_after_confirm cho file")
+        self.assertTrue(allowed, msg="missing audit allowed_after_confirm for file")
 
     # -- 7. check-file stdin: explicit field + patch headers -------------------
 
@@ -245,10 +245,10 @@ class EngineCliTests(unittest.TestCase):
         self.assertEqual(r.returncode, 2, msg=r.stdout)
         blocked = [e for e in self.audit_events()
                    if e.get("event") == "file" and e.get("action") == "blocked"]
-        # .env KHÔNG phải file cuối trong patch — vẫn phải bị bắt (collect TẤT CẢ headers)
+        # .env is NOT the last file in the patch — it must still be caught (collect ALL headers)
         self.assertEqual(blocked[0].get("path"), ".env")
 
-    # -- 8. self-test (đủ 9 fixtures như src/selftest-fixtures.ts) -------------
+    # -- 8. self-test (all 9 fixtures like src/selftest-fixtures.ts) -------------
 
     def test_self_test_exits_0(self):
         r = self.run_engine(["self-test"])
@@ -256,12 +256,12 @@ class EngineCliTests(unittest.TestCase):
         self.assertIn("self-test:", r.stdout)
         self.assertIn("9/9 pass", r.stdout)
 
-    # -- 9. regression: stdin cp1252 không được silent-skip ---------------------
+    # -- 9. regression: cp1252 stdin must not be silently skipped ---------------------
 
     def test_cp1252_stdin_prompt_still_blocks(self):
-        # PYTHONIOENCODING=cp1252, KHÔNG PYTHONUTF8: engine phải reconfigure stdin
-        # sang utf-8 — trước fix, đọc prompt utf-8 ném UnicodeDecodeError (subclass
-        # ValueError) bị fail-open nuốt -> exit 0 mà không quét (silent-skip).
+        # PYTHONIOENCODING=cp1252, NO PYTHONUTF8: the engine must reconfigure stdin
+        # to utf-8 — before the fix, reading a utf-8 prompt raised UnicodeDecodeError (subclass of
+        # ValueError), swallowed by fail-open -> exit 0 without scanning (silent-skip).
         env = dict(os.environ,
                    AI_GUARD_BUILTIN_RULES=str(self.builtin_artifact),
                    PYTHONIOENCODING="cp1252")
@@ -281,7 +281,7 @@ class EngineCliTests(unittest.TestCase):
 
 
 class EngineUnitTests(unittest.TestCase):
-    """Unit asserts nhanh cho mask/placeholder (import trực tiếp module)."""
+    """Quick unit asserts for mask/placeholder (module imported directly)."""
 
     @classmethod
     def setUpClass(cls):
@@ -296,7 +296,7 @@ class EngineUnitTests(unittest.TestCase):
             self.assertFalse(ip(v), msg=v)
 
     def test_is_placeholder_length_guard(self):
-        # chuỗi >200 ký tự coi như giá trị thật dù trông như placeholder
+        # a >200-char string counts as a real value even if it looks like a placeholder
         self.assertFalse(self.engine.is_placeholder("your_api_key" + "x" * 200))
         self.assertTrue(self.engine.is_placeholder("your_api_key" + "x" * 100))
 
@@ -305,8 +305,8 @@ class EngineUnitTests(unittest.TestCase):
         self.assertEqual(m("ab"), "***")
         self.assertEqual(m("abcd"), "***")
         self.assertEqual(m("abcde"), "ab***")
-        self.assertEqual(m("abcdefghijklmno"), "abcdef***lmno")  # 15 ký tự
-        self.assertEqual(m("  abcdefghijklmno  "), "abcdef***lmno")  # trim trước khi mask
+        self.assertEqual(m("abcdefghijklmno"), "abcdef***lmno")  # 15 chars
+        self.assertEqual(m("  abcdefghijklmno  "), "abcdef***lmno")  # trim before masking
 
     def test_shannon_entropy_basics(self):
         self.assertEqual(self.engine.shannon_entropy(""), 0.0)
@@ -314,8 +314,8 @@ class EngineUnitTests(unittest.TestCase):
         self.assertGreater(self.engine.shannon_entropy("ab"), 0.9)
 
     def test_regex_ascii_parity_with_js(self):
-        # JS \b là ASCII-based: "đAKIA..." phải match như JS;
-        # python unicode-mode \b sẽ xem "đA" là word-word -> không boundary.
+        # JS \b is ASCII-based: "đAKIA..." must match like JS;
+        # python unicode-mode \b would treat "đA" as word-word -> no boundary.
         rules = self.engine.compile_rules([
             {"id": "aws-access-key", "severity": "block",
              "pattern": r"\b(?:AKIA|ASIA)[0-9A-Z]{16}\b",
@@ -324,11 +324,11 @@ class EngineUnitTests(unittest.TestCase):
         self.assertIsNotNone(rules[0]["re"].search("đAKIAIOSFODNN7EXAMPLE"))
 
     def test_db_url_pattern_verbatim_from_dist(self):
-        # lock verbatim-ness: pattern trong test artifact phải GIỐNG HỆT chuỗi
-        # (không phải chỉ regex-tương đương) đọc từ dist/rules.json
+        # lock verbatim-ness: the pattern in the test artifact must be IDENTICAL to the string
+        # (not merely regex-equivalent) read from dist/rules.json
         dist_rules = Path(__file__).resolve().parents[2] / "dist" / "rules.json"
         if not dist_rules.exists():
-            self.skipTest("dist/rules.json chưa build")
+            self.skipTest("dist/rules.json not built yet")
         dist_pattern = [r["pattern"] for r in json.loads(dist_rules.read_text(encoding="utf-8"))
                         if r["id"] == "db-url"][0]
         artifact_pattern = [r["pattern"] for r in RULES_ARTIFACT if r["id"] == "db-url"][0]
@@ -336,7 +336,7 @@ class EngineUnitTests(unittest.TestCase):
 
 
 class LoadRulesUnitTests(unittest.TestCase):
-    """Mirror semantics của tests/loader.test.ts: remove -> add (replace) -> override."""
+    """Mirror the semantics of tests/loader.test.ts: remove -> add (replace) -> override."""
 
     @classmethod
     def setUpClass(cls):
@@ -375,8 +375,8 @@ class LoadRulesUnitTests(unittest.TestCase):
         ]})
         rules = self.engine.load_rules(str(self.proj))
         jwt = [r for r in rules if r["id"] == "jwt"]
-        self.assertEqual(len(jwt), 1)  # THAY THẾ, không nhân đôi
-        self.assertEqual(jwt[0]["severity"], "block")  # block thay cho warn
+        self.assertEqual(len(jwt), 1)  # REPLACED, not duplicated
+        self.assertEqual(jwt[0]["severity"], "block")  # block instead of warn
         self.assertIsNotNone(jwt[0]["re"].search("REPLACED-ABC"))
 
     def test_remove_rule(self):
@@ -401,11 +401,11 @@ class LoadRulesUnitTests(unittest.TestCase):
         self.write_rules({"override": {"jwt": {"severity": "blok"}}})
         rules = self.engine.load_rules(str(self.proj))
         jwt = [r for r in rules if r["id"] == "jwt"][0]
-        self.assertEqual(jwt["severity"], "warn")  # giữ severity gốc
+        self.assertEqual(jwt["severity"], "warn")  # keeps the original severity
 
     def test_corrupt_rules_json_fail_open(self):
         self.write_rules("{invalid json")
-        rules = self.engine.load_rules(str(self.proj))  # không throw
+        rules = self.engine.load_rules(str(self.proj))  # does not throw
         self.assertIn("aws-access-key", self.rule_ids(rules))
 
     def test_bom_rules_json_still_parsed(self):

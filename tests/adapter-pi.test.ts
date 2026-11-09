@@ -12,7 +12,7 @@ describe("pi adapter", () => {
     expect(piAdapter.detect(mkproject({ pi: true }))).toBe(true);
     expect(piAdapter.detect(mkproject({}))).toBe(false);
   });
-  it("install tạo shim extension chứa marker + guard hardened, idempotent", () => {
+  it("install creates shim extension with marker + hardened guard, idempotent", () => {
     const root = mkproject({ pi: true });
     expect(piAdapter.install(root, { instructions: false }).ok).toBe(true);
     piAdapter.install(root, { instructions: false });
@@ -20,36 +20,36 @@ describe("pi adapter", () => {
     expect(shim).toContain("ai-guard check-file");
     expect(shim).toContain("ai-guard check-prompt");
     expect(shim).toContain("resolveCmd");
-    // fast-path: package tên ai-credential-guard + runtime guard (mirror opencode-shim v3)
+    // fast-path: package named ai-credential-guard + runtime guard (mirrors opencode-shim v3)
     expect(shim).toContain("ai-credential-guard");
     expect(shim).toContain("import.meta");
     expect(shim).toContain("timeout");
   });
-  it("install với instructions -> AGENTS.md có marker section", () => {
+  it("install with instructions -> AGENTS.md has marker section", () => {
     const root = mkproject({ pi: true });
     piAdapter.install(root, { instructions: true });
     expect(readFileSync(join(root, "AGENTS.md"), "utf8")).toContain("ai-guard:start");
   });
-  it("uninstall xóa shim file của mình, giữ file lạ", () => {
+  it("uninstall deletes own shim file, keeps foreign files", () => {
     const root = mkproject({ pi: true });
     piAdapter.install(root, { instructions: true });
     const res = piAdapter.uninstall(root);
     expect(res.ok).toBe(true);
     expect(existsSync(join(root, SHIM))).toBe(false);
     expect(existsSync(join(root, "AGENTS.md"))).toBe(true);
-    // shim lạ (không marker) tại đúng path đó -> không xóa
+    // foreign shim (no marker) at that exact path -> not deleted
     mkdirSync(join(root, ".pi", "extensions"), { recursive: true });
     writeFileSync(join(root, SHIM), "export default function (pi: any) { pi.on('tool_call', async () => {}); }\n");
     const res2 = piAdapter.uninstall(root);
     expect(res2.ok).toBe(true);
     expect(existsSync(join(root, SHIM))).toBe(true);
   });
-  it("doctor trước/sau install; shim lạ -> không phải của ai-guard", () => {
+  it("doctor before/after install; foreign shim -> not ai-guard's", () => {
     const root = mkproject({ pi: true });
     expect(piAdapter.doctor(root).ok).toBe(false);
     piAdapter.install(root, { instructions: false });
     expect(piAdapter.doctor(root).ok).toBe(true);
-    // shim lạ (không marker) -> doctor báo không phải của ai-guard
+    // foreign shim (no marker) -> doctor reports it does not belong to ai-guard
     writeFileSync(join(root, SHIM), "export default function (pi: any) { pi.on('tool_call', async () => {}); }\n");
     const d = piAdapter.doctor(root);
     expect(d.ok).toBe(false);

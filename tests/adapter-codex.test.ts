@@ -9,7 +9,7 @@ describe("codex adapter", () => {
     expect(codexAdapter.detect(mkproject({ codex: true }))).toBe(true);
     expect(codexAdapter.detect(mkproject({}))).toBe(false);
   });
-  it("install ghi .codex/hooks.json với 2 event + marker, idempotent", () => {
+  it("install writes .codex/hooks.json with 2 events + marker, idempotent", () => {
     const root = mkproject({ codex: true });
     expect(codexAdapter.install(root, { instructions: false }).ok).toBe(true);
     codexAdapter.install(root, { instructions: false });
@@ -19,7 +19,7 @@ describe("codex adapter", () => {
     expect(raw).toContain("apply_patch");
     expect((raw.match(/ai-guard check-prompt/g) ?? []).length).toBe(1);
   });
-  it("install tạo AGENTS.md education khi instructions bật (idempotent)", () => {
+  it("install creates AGENTS.md education section when instructions enabled (idempotent)", () => {
     const root = mkproject({ codex: true });
     codexAdapter.install(root, { instructions: true });
     codexAdapter.install(root, { instructions: true });
@@ -27,7 +27,7 @@ describe("codex adapter", () => {
     expect(md).toContain("ai-guard:start");
     expect((md.match(/ai-guard:start/g) ?? []).length).toBe(1);
   });
-  it("install giữ config user cũ", () => {
+  it("install preserves existing user config", () => {
     const root = mkproject({ codex: true });
     mkdirSync(join(root, ".codex"), { recursive: true });
     writeFileSync(join(root, ".codex", "hooks.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "echo done" }] }] } }));
@@ -36,7 +36,7 @@ describe("codex adapter", () => {
     expect(JSON.stringify(data.hooks.Stop)).toContain("echo done");
     expect(data.hooks.UserPromptSubmit).toBeTruthy();
   });
-  it("uninstall bỏ marker entries, giữ Stop của user", () => {
+  it("uninstall removes marker entries, keeps the user's Stop", () => {
     const root = mkproject({ codex: true });
     mkdirSync(join(root, ".codex"), { recursive: true });
     writeFileSync(join(root, ".codex", "hooks.json"), JSON.stringify({ hooks: { Stop: [{ hooks: [{ type: "command", command: "echo done" }] }] } }));
@@ -47,13 +47,13 @@ describe("codex adapter", () => {
     expect(JSON.stringify(after.hooks.Stop)).toContain("echo done");
     expect(readFileSync(join(root, ".codex", "hooks.json"), "utf8")).not.toContain("ai-guard");
   });
-  it("doctor: sau install ok, trước install fail", () => {
+  it("doctor: ok after install, fail before install", () => {
     const root = mkproject({ codex: true });
     expect(codexAdapter.doctor(root).ok).toBe(false);
     codexAdapter.install(root, { instructions: false });
     expect(codexAdapter.doctor(root).ok).toBe(true);
   });
-  it("entry malform (thiếu hooks array) không làm doctor throw", () => {
+  it("malformed entry (missing hooks array) does not make doctor throw", () => {
     const root = mkproject({ codex: true });
     mkdirSync(join(root, ".codex"), { recursive: true });
     writeFileSync(join(root, ".codex", "hooks.json"), JSON.stringify({ hooks: { UserPromptSubmit: [{ matcher: "x" }] } }));

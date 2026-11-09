@@ -4,22 +4,22 @@ import type { AdapterBase, InstallOptions, InstallResult } from "./types";
 import { MARKER } from "../util/json-config";
 import { appendMarkedSection, templatePath } from "./hooks-json";
 
-// Factory cho adapter dạng "shim file": tool không có config hooks JSON (OpenCode, Pi) —
-// intercept qua file TS shim đặt tại vị trí cố định trong project, shim spawn shared CLI.
+// Factory for "shim file" adapters: tools without a JSON hooks config (OpenCode, Pi) —
+// intercepted via a TS shim file placed at a fixed location in the project; the shim spawns the shared CLI.
 export interface ShimAdapterSpec {
   id: string;
   label: string;
-  detectDir: string; // ".opencode" | ".pi" — dấu hiệu tool đang dùng trong project
+  detectDir: string; // ".opencode" | ".pi" — indicates the tool is used in the project
   shimRelPath: string; // posix, relative to project root: ".opencode/plugins/ai-guard.ts"
-  shimTemplate: string; // tên file trong templates/: "opencode-shim.ts"
+  shimTemplate: string; // file name in templates/: "opencode-shim.ts"
   instructionsFile?: string; // "AGENTS.md" — education layer
-  instructionsTemplates: string[]; // tên theo thứ tự ưu tiên: ["opencode-instructions.md", "codex-instructions.md"]
+  instructionsTemplates: string[]; // names in priority order: ["opencode-instructions.md", "codex-instructions.md"]
 }
 
 export function makeShimAdapter(spec: ShimAdapterSpec): AdapterBase {
   const shimFile = join(...spec.shimRelPath.split("/"));
   // src: <repo>/src/adapters -> ../../templates; dist: <pkg>/dist/adapters -> ../../templates
-  // (fallback ../../../templates — giữ nguyên candidate list của opencode cũ).
+  // (fallback ../../../templates — keeps the legacy opencode candidate list).
   const templateCandidates = (name: string) => [
     join(__dirname, "..", "..", "templates", name),
     join(__dirname, "..", "..", "..", "templates", name),
@@ -31,7 +31,7 @@ export function makeShimAdapter(spec: ShimAdapterSpec): AdapterBase {
     install(root: string, opts: InstallOptions): InstallResult {
       try {
         const shim = readFileSync(templatePath(...templateCandidates(spec.shimTemplate)), "utf8");
-        // Atomic install: tính nội dung education TRƯỚC khi mutate file nào.
+        // Atomic install: compute education content BEFORE mutating any file.
         const instrFile = spec.instructionsFile;
         let instruction: string | null = null;
         if (opts.instructions && instrFile) {
@@ -40,8 +40,8 @@ export function makeShimAdapter(spec: ShimAdapterSpec): AdapterBase {
             readFileSync(templatePath(...spec.instructionsTemplates.flatMap(templateCandidates)), "utf8"),
           );
         }
-        // Luôn ghi đè: shim là file hoàn toàn của ai-guard (không merge config user),
-        // nên overwrite bằng template hiện tại vừa idempotent vừa nâng cấp được.
+        // Always overwrite: the shim is fully owned by ai-guard (no user config merge),
+        // so overwriting with the current template is both idempotent and upgrades it.
         const dest = join(root, shimFile);
         mkdirSync(dirname(dest), { recursive: true });
         writeFileSync(dest, shim);
@@ -55,12 +55,12 @@ export function makeShimAdapter(spec: ShimAdapterSpec): AdapterBase {
       try {
         const dest = join(root, shimFile);
         if (!existsSync(dest)) return { adapter: spec.id, ok: true, detail: "no shim — nothing to remove" };
-        // Chỉ xóa file của mình: shim lạ (không marker) tại đúng path đó thì giữ nguyên.
+        // Only delete our own file: a foreign shim (no marker) at that path is left untouched.
         if (!readFileSync(dest, "utf8").includes(MARKER)) {
           return { adapter: spec.id, ok: true, detail: "file does not belong to ai-guard — not removing" };
         }
         rmSync(dest);
-        // GIỮ education file (đánh dấu follow-up; nhất quán với claude-code hiện tại).
+        // KEEP the education file (marked as follow-up; consistent with current claude-code).
         return { adapter: spec.id, ok: true, detail: `ai-guard shim removed (${spec.instructionsFile ?? "AGENTS.md"} kept)` };
       } catch (e) {
         return { adapter: spec.id, ok: false, detail: String(e) };

@@ -3,7 +3,7 @@ export type Severity = "block" | "warn";
 export interface Rule {
   id: string;
   severity: Severity;
-  pattern: string;          // rỗng nếu builtin detector
+  pattern: string;          // empty if builtin detector
   description: string;
   builtin?: "generic-secret" | "high-entropy";
 }
@@ -25,19 +25,19 @@ export interface ProjectRules {
   remove?: string[];
 }
 
-// Cấu hình cho JEV / OpenJEV (hoặc bất kỳ server tương thích openjev-server): một decision API
-// nhận text + câu hỏi, trả xác suất calibrated per-question. TẤT CẢ optional, mặc định TẮT ->
-// không bật nếu user không cấu hình (giữ nguyên hành vi fail-open, offline, không network).
-// API key KHÔNG lưu trong config (file này không gitignore mặc định, và cả mục đích của tool là
-// giữ secret ra khỏi file) — key đọc từ biến môi trường (apiKeyEnv, mặc định JEV_API_KEY).
+// Configuration for JEV / OpenJEV (or any openjev-server compatible server): a decision API
+// that takes text + questions and returns a calibrated per-question probability. ALL optional, OFF by default ->
+// not enabled unless the user configures it (keeps fail-open, offline, no-network behavior).
+// The API key is NOT stored in config (this file is not gitignored by default, and the whole point of the tool is
+// to keep secrets out of files) — the key is read from an environment variable (apiKeyEnv, default JEV_API_KEY).
 export interface JevConfig {
-  enabled?: boolean;         // default false — phải bật tường minh
-  endpoint?: string;         // URL decision API, vd http://localhost:8000/v1/decide
-  apiKeyEnv?: string;        // tên biến môi trường chứa API key (default "JEV_API_KEY")
-  model?: string;            // optional — chọn model trên openjev-server (vd "openjev")
-  mode?: Severity;           // severity cho finding JEV (default "warn" — không chặn cứng theo mặc định)
-  threshold?: number;        // ngưỡng xác suất 0..1 để coi là phát hiện (default 0.8)
-  timeoutMs?: number;        // timeout request (default 5000) — fail-open khi quá hạn
+  enabled?: boolean;         // default false — must be enabled explicitly
+  endpoint?: string;         // decision API URL, e.g. http://localhost:8000/v1/decide
+  apiKeyEnv?: string;        // name of the env variable holding the API key (default "JEV_API_KEY")
+  model?: string;            // optional — select the model on openjev-server (e.g. "openjev")
+  mode?: Severity;           // severity for JEV findings (default "warn" — does not hard-block by default)
+  threshold?: number;        // probability threshold 0..1 to count as a detection (default 0.8)
+  timeoutMs?: number;        // request timeout (default 5000) — fail-open when exceeded
 }
 
 export interface AiGuardConfig {
@@ -60,6 +60,6 @@ export interface AuditEvent {
   scope?: string;
   duration_min?: number;
   count?: number;
-  source?: "engine" | "jev"; // finding đến từ regex engine hay từ decision API JEV
-  score?: number;            // xác suất calibrated 0..1 do JEV trả (chỉ khi source="jev")
+  source?: "engine" | "jev"; // finding came from the regex engine or the JEV decision API
+  score?: number;            // calibrated probability 0..1 returned by JEV (only when source="jev")
 }
