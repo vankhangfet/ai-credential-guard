@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { AiGuardConfig, CompiledRule, ProjectRules, Rule } from "../types";
+import type { AiGuardConfig, CompiledRule, JevConfig, ProjectRules, Rule, Severity } from "../types";
 import { builtInRules, compileRules } from "./rules";
 import { DEFAULT_SENSITIVE_PATHS } from "./paths";
 
@@ -40,5 +40,26 @@ export function loadConfig(projectRoot: string): AiGuardConfig {
     sensitivePaths: Array.isArray(cfg.sensitivePaths) && cfg.sensitivePaths.length ? cfg.sensitivePaths : DEFAULT_SENSITIVE_PATHS,
     genericSecret: cfg.genericSecret ?? true,
     highEntropy: cfg.highEntropy ?? true,
+    jev: normalizeJevConfig(cfg.jev),
+  };
+}
+
+// JEV mặc định TẮT: chỉ coi là enabled khi enabled===true VÀ có endpoint hợp lệ. Giá trị out-of-range
+// được kẹp về default an toàn. Không throw — config lỗi -> trả về disabled (fail-open).
+function normalizeJevConfig(j: JevConfig | undefined): JevConfig {
+  if (!j || typeof j !== "object") return { enabled: false };
+  const endpoint = typeof j.endpoint === "string" ? j.endpoint.trim() : "";
+  const enabled = j.enabled === true && endpoint.length > 0;
+  const threshold = typeof j.threshold === "number" && j.threshold >= 0 && j.threshold <= 1 ? j.threshold : 0.8;
+  const timeoutMs = typeof j.timeoutMs === "number" && j.timeoutMs > 0 ? Math.min(j.timeoutMs, 30000) : 5000;
+  const mode: Severity = j.mode === "block" ? "block" : "warn";
+  return {
+    enabled,
+    endpoint: endpoint || undefined,
+    apiKeyEnv: typeof j.apiKeyEnv === "string" && j.apiKeyEnv.trim() ? j.apiKeyEnv.trim() : "JEV_API_KEY",
+    model: typeof j.model === "string" && j.model.trim() ? j.model.trim() : undefined,
+    mode,
+    threshold,
+    timeoutMs,
   };
 }

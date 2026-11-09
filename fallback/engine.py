@@ -185,6 +185,9 @@ def load_config(root: str) -> dict:
     sp = cfg.get("sensitivePaths")
     generic = cfg.get("genericSecret")
     entropy = cfg.get("highEntropy")
+    # NOTE: config có thể chứa block "jev" (JEV/OpenJEV decision API) — fallback CỐ TÌNH bỏ qua:
+    # engine này là stdlib-only, no-network, dùng cho môi trường không có node. JEV là feature
+    # optional, cần HTTP, chỉ chạy ở node CLI (src/engine/jev.ts). Bỏ qua ở đây là fail-open đúng.
     return {
         "sensitivePaths": sp if isinstance(sp, list) and sp else list(DEFAULT_SENSITIVE_PATHS),
         "genericSecret": generic if isinstance(generic, bool) else True,

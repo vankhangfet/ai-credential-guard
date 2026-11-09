@@ -1,7 +1,9 @@
 import { isAbsolute, join, relative } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { findProjectRoot } from "../root";
 import { loadConfig } from "../engine/loader";
 import { isSensitivePath, normalizePath } from "../engine/paths";
+import { scanWithJev } from "../engine/jev";
 import { appendAuditEvent } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { flagValue } from "../util/argv";
@@ -70,10 +72,15 @@ export async function checkFile(argv: string[], input: string): Promise<number> 
   const candidates = extractPathCandidates(argv, input);
   if (candidates.length === 0) return 0;
   const cfg = loadConfig(projectRoot);
+  const jevCandidates: string[] = [];
   for (const raw of candidates) {
     const abs = isAbsolute(raw) ? raw : join(projectRoot, raw);
     const rel = normalizePath(relative(projectRoot, abs) || raw);
-    if (!isSensitivePath(rel, cfg.sensitivePaths ?? [])) continue;
+    if (!isSensitivePath(rel, cfg.sensitivePaths ?? [])) {
+      // không khớp path-gate — để JEV (nếu bật) soi nội dung ở pass sau
+      jevCandidates.push(rel);
+      continue;
+    }
     if (hasValidBypass(projectRoot, "file", rel)) {
       appendAuditEvent(projectRoot, { ts: new Date().toISOString(), tool, event: "file", action: "allowed_after_confirm", path: rel });
       return 0;
@@ -89,5 +96,61 @@ export async function checkFile(argv: string[], input: string): Promise<number> 
     );
     return 2;
   }
+  // JEV / OpenJEV (optional, mặc định tắt): soi NỘI DUNG của file không khớp path-gate, bắt credential
+  // bị ghi nhầm vào file thường (vd src/config.ts). Fail-open: lỗi/timeout/không bật -> không ảnh hưởng.
+  if (cfg.jev?.enabled) {
+    const jevCode = await scanCandidatesWithJev(projectRoot, tool, jevCandidates, cfg);
+    if (jevCode !== 0) return jevCode;
+  }
   return 0;
+}
+
+// Đọc nội dung từng candidate (bỏ qua file không tồn tại / quá lớn / đã bypass), gửi JEV. Finding
+// block -> chặn (exit 2); chỉ warn -> log warned, exit 0. Không bao giờ throw.
+const JEV_MAX_FILE_BYTES = 256 * 1024;
+async function scanCandidatesWithJev(projectRoot: string, tool: string, rels: string[], cfg: ReturnType<typeof loadConfig>): Promise<number> {
+  for (const rel of rels) {
+    const abs = isAbsolute(rel) ? rel : join(projectRoot, rel);
+    let content = "";
+    try {
+      if (!existsSync(abs)) continue;
+      const st = statSync(abs);
+      if (!st.isFile() || st.size === 0 || st.size > JEV_MAX_FILE_BYTES) continue;
+      content = readFileSync(abs, "utf8");
+    } catch {
+      continue; // không đọc được -> fail-open
+    }
+    const findings = await scanWithJev(content, cfg.jev);
+    if (!findings.length) continue;
+    const block = findings.find((f) => f.severity === "block");
+    const first = block ?? findings[0];
+    const score = parseJevScore(first.description);
+    const nowISO = new Date().toISOString();
+    if (block) {
+      if (hasValidBypass(projectRoot, "file", rel)) {
+        appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "file", action: "allowed_after_confirm", path: rel, rule: first.ruleId, source: "jev", score });
+        continue;
+      }
+      appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "file", action: "blocked", path: rel, rule: first.ruleId, source: "jev", score });
+      process.stderr.write(
+        [
+          "ai-guard: BLOCKED — JEV flagged credential/exfiltration risk in file content.",
+          `  • Path: ${rel}`,
+          `  • ${first.ruleId}: ${first.description}`,
+          "If you INTENTIONALLY want to allow this file, run:",
+          `  npx ai-guard allow file ${rel} --10m`,
+        ].join("\n") + "\n"
+      );
+      return 2;
+    }
+    // chỉ warn
+    appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "file", action: "warned", path: rel, rule: first.ruleId, source: "jev", score });
+  }
+  return 0;
+}
+
+// Trích % confidence jev.ts nhúng trong description -> số 0..1.
+function parseJevScore(description: string): number | undefined {
+  const m = description.match(/\((\d{1,3})% confidence\)/);
+  return m ? Math.max(0, Math.min(1, Number(m[1]) / 100)) : undefined;
 }
