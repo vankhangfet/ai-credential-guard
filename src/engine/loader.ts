@@ -61,5 +61,6 @@ function normalizeJevConfig(j: JevConfig | undefined): JevConfig {
     mode,
     threshold,
     timeoutMs,
+    questionType: j.questionType === "choice" ? "choice" : "noul",
   };
 }

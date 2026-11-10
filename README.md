@@ -74,6 +74,7 @@ export JEV_API_KEY=...   # omit for a local unauthenticated server
 - **Start in `warn` mode** and review the audit log. Switch to `"block"` once you trust the scores.
 - **Use it as a complement, not a replacement.** In testing, injection prompts scored ~1.00, but fake-looking passwords scored only ~0.50.
 - **Self-hosted servers:** set `model` to the id your server reports (`GET /v1/models`) and raise `timeoutMs` (e.g. `10000`) — a cold local model can be slow on its first call. Use `apiKeyEnv` to read the key from a different environment variable (default `JEV_API_KEY`).
+- **Choice-only gateways:** some servers reject `noul` questions with `unsupported_question_type`. Set `"questionType": "choice"` and the guard asks the same questions as `yes` / `no` choices instead. Because the check fails open silently, test a new endpoint with a direct request (e.g. `curl`) first to see the server's error messages.
 - **Privacy:** prompt text and file content are sent to the endpoint. Prefer self-hosted for sensitive code.
 - **Python fallback:** supported too, using the same `.ai-guard/config.json` and the same settings. It uses only the Python standard library — no extra install.
 

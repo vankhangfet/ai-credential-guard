@@ -246,6 +246,7 @@ def normalize_jev_config(j) -> dict:
         "mode": "block" if j.get("mode") == "block" else "warn",
         "threshold": threshold,
         "timeoutMs": min(timeout_ms, 30000),
+        "questionType": "choice" if j.get("questionType") == "choice" else "noul",
     }
 
 
@@ -339,11 +340,19 @@ def scan_with_jev(text: str, jev_cfg, urlopen=None) -> list:
         api_key = os.environ.get(jev_cfg.get("apiKeyEnv") or "JEV_API_KEY")
         if api_key:
             headers["authorization"] = "Bearer " + api_key
-        questions = {
-            q["id"]: {"type": "noul", "instructions": q["question"],
-                      "criteria": {"true": q["yes"], "false": q["no"]}}
-            for q in JEV_QUESTIONS
-        }
+        # "choice" for gateways that only accept choice questions (options yes/no -> probabilities.yes)
+        if jev_cfg.get("questionType") == "choice":
+            questions = {
+                q["id"]: {"type": "choice", "instructions": q["question"],
+                          "criteria": {"yes": q["yes"], "no": q["no"]}}
+                for q in JEV_QUESTIONS
+            }
+        else:
+            questions = {
+                q["id"]: {"type": "noul", "instructions": q["question"],
+                          "criteria": {"true": q["yes"], "false": q["no"]}}
+                for q in JEV_QUESTIONS
+            }
         body = json.dumps({
             "model": jev_cfg.get("model") or JEV_DEFAULT_MODEL,
             "state": text,
