@@ -43,54 +43,114 @@ interface JevRequest {
 const DEFAULT_MODEL = "jev-latest"; // model is a required API field; the user can override via cfg.model
 
 /**
+ * Outcome of ONE request to the decision API — reported to the caller's onCall hook so it can be written to the
+ * audit log. Deliberately carries NO request text, NO raw response body on success (a server could echo the
+ * state back) and NO API key: only metadata, the per-question scores and the server's error message.
+ */
+export interface JevCallInfo {
+  ok: boolean;                     // true = HTTP 2xx and at least one score parsed
+  status?: number;                 // HTTP status (absent when the request never got a response)
+  ms: number;                      // round-trip time
+  scores?: Record<string, number>; // P(yes) per question id that was parsed
+  answers?: string;                // JSON of the response "answers" object only (truncated), on success
+  error?: string;                  // human-readable failure reason (server message, timeout, network, shape)
+  inputChars: number;              // length of the evaluated text (the text itself is never logged)
+}
+export type JevCallHook = (info: JevCallInfo) => void;
+
+const MAX_LOGGED_CHARS = 500;
+const truncate = (s: string, n = MAX_LOGGED_CHARS) => (s.length > n ? s.slice(0, n) + "…" : s);
+
+function buildQuestions(cfg: JevConfig, qs: typeof QUESTIONS): Record<string, JevRequestQuestion> {
+  const out: Record<string, JevRequestQuestion> = {};
+  for (const q of qs) {
+    out[q.id] = cfg.questionType === "choice"
+      ? { type: "choice", instructions: q.question, criteria: { yes: q.yes, no: q.no } }
+      : { type: "noul", instructions: q.question, criteria: { true: q.yes, false: q.no } };
+  }
+  return out;
+}
+
+// Single place that talks to the server; shared by scanWithJev (hooks) and probeJev (doctor). Never throws.
+async function callJev(
+  state: string,
+  cfg: JevConfig & { endpoint: string },
+  qs: typeof QUESTIONS,
+  fetchImpl: typeof fetch,
+): Promise<JevCallInfo> {
+  const apiKey = cfg.apiKeyEnv ? process.env[cfg.apiKeyEnv] : undefined;
+  const headers: Record<string, string> = { "content-type": "application/json" };
+  if (apiKey) headers["authorization"] = `Bearer ${apiKey}`;
+  const body: JevRequest = { model: cfg.model || DEFAULT_MODEL, state, questions: buildQuestions(cfg, qs) };
+  const timeoutMs = cfg.timeoutMs ?? 5000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const t0 = Date.now();
+  const base = { inputChars: state.length };
+  let status: number | undefined;
+  try {
+    const res = await fetchImpl(cfg.endpoint, { method: "POST", headers, body: JSON.stringify(body), signal: controller.signal });
+    status = res.status;
+    const text = await res.text();
+    const ms = Date.now() - t0;
+    let data: unknown;
+    try { data = JSON.parse(text); } catch { data = undefined; }
+    if (!res.ok) {
+      const err = (data as { error?: { message?: string; code?: string } } | undefined)?.error;
+      const msg = err?.message ?? err?.code ?? (truncate(text.trim(), 200) || "(empty body)");
+      const hint = status === 401 || status === 403 ? ` — check the API key in env ${cfg.apiKeyEnv ?? "JEV_API_KEY"}` : "";
+      return { ...base, ok: false, status, ms, error: `${msg}${hint}` };
+    }
+    const scores: Record<string, number> = {};
+    for (const q of qs) {
+      const p = extractYesProbability(data, q.id);
+      if (p !== null) scores[q.id] = p;
+    }
+    if (!Object.keys(scores).length) {
+      return { ...base, ok: false, status, ms, error: `no score found in the response — unsupported response shape: ${truncate(text, 200)}` };
+    }
+    const answers = (data as { answers?: unknown } | undefined)?.answers;
+    return { ...base, ok: true, status, ms, scores, answers: answers !== undefined ? truncate(JSON.stringify(answers)) : undefined };
+  } catch (e) {
+    const ms = Date.now() - t0;
+    const err = e as { name?: string; message?: string; cause?: { code?: string; message?: string } };
+    if (err?.name === "AbortError") return { ...base, ok: false, status, ms, error: `timed out after ${timeoutMs}ms — raise jev.timeoutMs` };
+    const cause = err?.cause?.code ?? err?.cause?.message ?? err?.message ?? String(e);
+    const tlsHint = /CERT|SSL|TLS|SELF_SIGNED/i.test(cause) ? " — TLS problem: set NODE_EXTRA_CA_CERTS to your CA bundle" : "";
+    return { ...base, ok: false, status, ms, error: `request failed: ${cause}${tlsHint}` };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function report(onCall: JevCallHook | undefined, info: JevCallInfo): void {
+  try { onCall?.(info); } catch { /* logging must never break the check */ }
+}
+
+/**
  * Runs the JEV decision API on a piece of text. Returns Finding[] (possibly empty). Never throws.
  * @param text   content to evaluate (a prompt, or file content)
  * @param cfg    JevConfig already normalized by loadConfig
  * @param fetchImpl  injectable for tests (defaults to Node >=20 global fetch)
+ * @param onCall     called once per request with the outcome (used for audit logging)
  */
 export async function scanWithJev(
   text: string,
   cfg: JevConfig | undefined,
   fetchImpl: typeof fetch = fetch,
+  onCall?: JevCallHook,
 ): Promise<Finding[]> {
   if (!cfg?.enabled || !cfg.endpoint || !text.trim()) return [];
   const threshold = cfg.threshold ?? 0.8;
   const severity = cfg.mode ?? "warn";
-
-  const apiKey = cfg.apiKeyEnv ? process.env[cfg.apiKeyEnv] : undefined;
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (apiKey) headers["authorization"] = `Bearer ${apiKey}`;
-
-  const questions: Record<string, JevRequestQuestion> = {};
-  for (const q of QUESTIONS) {
-    questions[q.id] = cfg.questionType === "choice"
-      ? { type: "choice", instructions: q.question, criteria: { yes: q.yes, no: q.no } }
-      : { type: "noul", instructions: q.question, criteria: { true: q.yes, false: q.no } };
-  }
-  const body: JevRequest = { model: cfg.model || DEFAULT_MODEL, state: text, questions };
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), cfg.timeoutMs ?? 5000);
-  let data: unknown;
-  try {
-    const res = await fetchImpl(cfg.endpoint, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    if (!res.ok) return []; // HTTP error -> fail-open, do not block
-    data = await res.json();
-  } catch {
-    return []; // timeout / network / bad JSON -> fail-open
-  } finally {
-    clearTimeout(timer);
-  }
+  const info = await callJev(text, { ...cfg, endpoint: cfg.endpoint }, QUESTIONS, fetchImpl);
+  report(onCall, info);
+  if (!info.ok || !info.scores) return []; // any failure -> fail-open (already reported via onCall)
 
   const findings: Finding[] = [];
   for (const q of QUESTIONS) {
-    const score = extractYesProbability(data, q.id);
-    if (score !== null && score >= threshold) {
+    const score = info.scores[q.id];
+    if (score !== undefined && score >= threshold) {
       findings.push({
         ruleId: q.id,
         severity,
@@ -101,6 +161,29 @@ export async function scanWithJev(
     }
   }
   return findings;
+}
+
+/**
+ * Connectivity probe for `doctor`: sends ONE request with a fixed benign text and reports the raw outcome
+ * (HTTP status + the server's error message). scanWithJev fails open, so without this a missing key (401),
+ * a wrong model or an unsupported question type would only be visible in the audit log. Never throws.
+ */
+export async function probeJev(
+  cfg: JevConfig | undefined,
+  fetchImpl: typeof fetch = fetch,
+  onCall?: JevCallHook,
+): Promise<{ ok: boolean; detail: string }> {
+  if (!cfg?.enabled || !cfg.endpoint) return { ok: false, detail: "disabled" };
+  const info = await callJev(
+    "ai-guard doctor connectivity check (benign text, no secret)",
+    { ...cfg, endpoint: cfg.endpoint },
+    [QUESTIONS[0]],
+    fetchImpl,
+  );
+  report(onCall, info);
+  const prefix = info.status !== undefined ? `HTTP ${info.status} in ${info.ms}ms` : "";
+  if (info.ok) return { ok: true, detail: `${prefix}, response parsed` };
+  return { ok: false, detail: prefix ? `${prefix}: ${info.error}` : info.error ?? "unknown error" };
 }
 
 // Extract the "yes" probability for a question from the response. Supports multiple shapes because openjev-server

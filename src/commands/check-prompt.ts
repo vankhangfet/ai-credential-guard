@@ -1,7 +1,7 @@
 import { loadRules, loadConfig } from "../engine/loader";
 import { scanText } from "../engine/scanner";
 import { scanWithJev } from "../engine/jev";
-import { appendAuditEvent } from "../audit/log";
+import { appendAuditEvent, logJevCall } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { findProjectRoot } from "../root";
 import { flagValue } from "../util/argv";
@@ -42,7 +42,9 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   // JEV / OpenJEV (optional, off by default): second opinion from the decision API. Fully fail-open —
   // error/timeout -> [] -> no behavior change. JEV findings merge into the block/warn/bypass pipeline like regex ones.
   const jevScores = new Map<string, number>();
-  const jevFindings = findings.some((f) => f.severity === "block") ? [] : await scanWithJev(prompt, cfg.jev);
+  const jevFindings = findings.some((f) => f.severity === "block")
+    ? []
+    : await scanWithJev(prompt, cfg.jev, undefined, (info) => logJevCall(projectRoot, tool, "prompt", cfg.jev, info));
   for (const f of jevFindings) {
     const score = parseJevScore(f.description);
     if (score !== null) jevScores.set(f.ruleId, score);
@@ -64,10 +66,15 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   }
   const b0 = blocks[0];
   appendAuditEvent(projectRoot, { ts: nowISO, tool, event: "prompt", action: warnOnly ? "warned" : "blocked", rule: b0.ruleId, preview: b0.preview, count: blocks.length, source: jevScores.has(b0.ruleId) ? "jev" : "engine", score: jevScores.get(b0.ruleId) });
+  // headline depends on WHAT was found: JEV's unauthorized-access question flags intent (injection /
+  // exfiltration), not a credential — saying "credential detected" there would mislead the user
+  const what = blocks.every((f) => f.ruleId === "jev-unauthorized-access")
+    ? "prompt-injection / exfiltration attempt detected"
+    : "credential detected";
   const lines = [
     warnOnly
-      ? "ai-guard: WARNING — credential detected in prompt. This tool cannot block prompts (platform limit): the text may still be sent to the model."
-      : "ai-guard: BLOCKED — credential detected in prompt (not sent to AI).",
+      ? `ai-guard: WARNING — ${what} in prompt. This tool cannot block prompts (platform limit): the text may still be sent to the model.`
+      : `ai-guard: BLOCKED — ${what} in prompt (not sent to AI).`,
     ...blocks.slice(0, 5).map((f) => `  • ${f.ruleId}: ${f.description} [preview: ${f.preview}]`),
   ];
   if (blocks.length > 5) lines.push(`  • ... and ${blocks.length - 5} more findings`);

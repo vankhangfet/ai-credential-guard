@@ -24,6 +24,7 @@ const DEFAULT_CONFIG = {
     mode: "warn",
     threshold: 0.8,
     timeoutMs: 5000,
+    questionType: "noul", // set "choice" for gateways that reject noul (unsupported_question_type)
   },
 };
 
