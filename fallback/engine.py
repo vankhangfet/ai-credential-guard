@@ -17,6 +17,9 @@ import os
 import re
 import sys
 import time
+import socket
+import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 
@@ -328,45 +331,130 @@ def _extract_yes_probability(data, qid):
     return None
 
 
-def scan_with_jev(text: str, jev_cfg, urlopen=None) -> list:
-    """Run the JEV decision API on text. Returns findings (possibly empty). Never raises."""
+JEV_MAX_LOGGED_CHARS = 500
+
+
+def _truncate(s: str, n: int = JEV_MAX_LOGGED_CHARS) -> str:
+    return s[:n] + "…" if len(s) > n else s
+
+
+def _jev_questions(jev_cfg: dict, qs: list) -> dict:
+    # "choice" for gateways that only accept choice questions (options yes/no -> probabilities.yes)
+    if jev_cfg.get("questionType") == "choice":
+        return {q["id"]: {"type": "choice", "instructions": q["question"],
+                          "criteria": {"yes": q["yes"], "no": q["no"]}} for q in qs}
+    return {q["id"]: {"type": "noul", "instructions": q["question"],
+                      "criteria": {"true": q["yes"], "false": q["no"]}} for q in qs}
+
+
+def _jev_server_error(status, raw: str, jev_cfg: dict) -> str:
     try:
-        if not isinstance(jev_cfg, dict) or not jev_cfg.get("enabled") or not jev_cfg.get("endpoint"):
-            return []
-        if not text.strip():
-            return []
+        err = json.loads(raw).get("error") if raw.strip() else None
+    except (ValueError, AttributeError):
+        err = None
+    msg = None
+    if isinstance(err, dict):
+        msg = err.get("message") or err.get("code")
+    if not msg:
+        msg = _truncate(raw.strip(), 200) or "(empty body)"
+    if status in (401, 403):
+        msg += " — check the API key in env " + (jev_cfg.get("apiKeyEnv") or "JEV_API_KEY")
+    return msg
+
+
+def call_jev(text: str, jev_cfg: dict, qs: list, urlopen=None) -> dict:
+    """ONE request to the decision API (mirror callJev in src/engine/jev.ts). Never raises.
+
+    Returns call info for the audit log: ok, status?, ms, scores?, answers?, error?, inputChars.
+    Never carries the request text, the raw response body on success, or the API key.
+    """
+    t0 = time.time()
+    info = {"ok": False, "inputChars": len(text)}
+    status = None
+    try:
         opener = urlopen or urllib.request.urlopen
         headers = {"content-type": "application/json"}
         api_key = os.environ.get(jev_cfg.get("apiKeyEnv") or "JEV_API_KEY")
         if api_key:
             headers["authorization"] = "Bearer " + api_key
-        # "choice" for gateways that only accept choice questions (options yes/no -> probabilities.yes)
-        if jev_cfg.get("questionType") == "choice":
-            questions = {
-                q["id"]: {"type": "choice", "instructions": q["question"],
-                          "criteria": {"yes": q["yes"], "no": q["no"]}}
-                for q in JEV_QUESTIONS
-            }
-        else:
-            questions = {
-                q["id"]: {"type": "noul", "instructions": q["question"],
-                          "criteria": {"true": q["yes"], "false": q["no"]}}
-                for q in JEV_QUESTIONS
-            }
         body = json.dumps({
             "model": jev_cfg.get("model") or JEV_DEFAULT_MODEL,
             "state": text,
-            "questions": questions,
+            "questions": _jev_questions(jev_cfg, qs),
         }).encode("utf-8")
+        timeout_s = jev_cfg.get("timeoutMs", 5000) / 1000.0
         req = urllib.request.Request(jev_cfg["endpoint"], data=body, headers=headers, method="POST")
-        with opener(req, timeout=jev_cfg.get("timeoutMs", 5000) / 1000.0) as res:
-            status = getattr(res, "status", 200)
-            if not 200 <= status < 300:
-                return []  # HTTP error -> fail-open
-            data = json.loads(res.read().decode("utf-8"))
+        try:
+            with opener(req, timeout=timeout_s) as res:
+                status = getattr(res, "status", 200)
+                raw = res.read().decode("utf-8", errors="replace")
+        except urllib.error.HTTPError as e:  # 4xx/5xx: urllib raises, but the body holds the server's reason
+            status = e.code
+            try:
+                raw = e.read().decode("utf-8", errors="replace")
+            except Exception:  # noqa: BLE001
+                raw = ""
+        info["status"] = status
+        if not 200 <= status < 300:
+            info["error"] = _jev_server_error(status, raw, jev_cfg)
+            return info
+        try:
+            data = json.loads(raw)
+        except ValueError:
+            data = None
+        scores = {}
+        for q in qs:
+            p = _extract_yes_probability(data, q["id"])
+            if p is not None:
+                scores[q["id"]] = p
+        if not scores:
+            info["error"] = "no score found in the response — unsupported response shape: " + _truncate(raw, 200)
+            return info
+        info["ok"] = True
+        info["scores"] = scores
+        if isinstance(data, dict) and "answers" in data:
+            info["answers"] = _truncate(json.dumps(data["answers"], separators=(",", ":"), ensure_ascii=False))
+        return info
+    except (socket.timeout, TimeoutError):
+        info["error"] = "timed out after {}ms — raise jev.timeoutMs".format(int(jev_cfg.get("timeoutMs", 5000)))
+        return info
+    except urllib.error.URLError as e:
+        reason = e.reason
+        if isinstance(reason, (socket.timeout, TimeoutError)):
+            info["error"] = "timed out after {}ms — raise jev.timeoutMs".format(int(jev_cfg.get("timeoutMs", 5000)))
+        else:
+            info["error"] = "request failed: {}".format(reason)
+        return info
+    except Exception as e:  # noqa: BLE001 - anything else -> fail-open, but recorded
+        info["error"] = "request failed: {}: {}".format(type(e).__name__, sanitize_error_message(str(e)))
+        return info
+    finally:
+        info["ms"] = int((time.time() - t0) * 1000)
+        if status is not None:
+            info["status"] = status
+
+
+def scan_with_jev(text: str, jev_cfg, urlopen=None, on_call=None) -> list:
+    """Run the JEV decision API on text. Returns findings (possibly empty). Never raises.
+
+    on_call(info) is invoked once per request with the call outcome (used for audit logging).
+    """
+    try:
+        if not isinstance(jev_cfg, dict) or not jev_cfg.get("enabled") or not jev_cfg.get("endpoint"):
+            return []
+        if not text.strip():
+            return []
+        info = call_jev(text, jev_cfg, JEV_QUESTIONS, urlopen)
+        if on_call is not None:
+            try:
+                on_call(info)
+            except Exception:  # noqa: BLE001 - logging must never break the check
+                pass
+        if not info.get("ok"):
+            return []  # any failure -> fail-open (already reported via on_call)
         findings = []
         for q in JEV_QUESTIONS:
-            score = _extract_yes_probability(data, q["id"])
+            score = info["scores"].get(q["id"])
             if score is not None and score >= jev_cfg.get("threshold", 0.8):
                 findings.append({
                     "ruleId": q["id"],
@@ -376,8 +464,54 @@ def scan_with_jev(text: str, jev_cfg, urlopen=None) -> list:
                     "preview": mask_secret("jev:{}:{:.2f}".format(q["id"], score)),
                 })
         return findings
-    except Exception:  # noqa: BLE001 - network/timeout/parse/anything -> fail-open
+    except Exception:  # noqa: BLE001 - anything -> fail-open
         return []
+
+
+def safe_endpoint(endpoint):
+    """Endpoint without userinfo / query string, so a credential in the URL never reaches the log."""
+    if not endpoint:
+        return None
+    try:
+        u = urllib.parse.urlsplit(endpoint)
+        if not u.scheme or not u.hostname:
+            return "(invalid url)"
+        host = u.hostname + (":{}".format(u.port) if u.port else "")
+        return "{}://{}{}".format(u.scheme, host, u.path)
+    except ValueError:
+        return "(invalid url)"
+
+
+def log_jev_call(root: str, tool: str, target: str, jev_cfg: dict, info: dict, path=None) -> None:
+    """One audit record per JEV request (event "jev"): jev_call on success, jev_error on failure."""
+    evt = {
+        "ts": _now_iso(), "tool": tool, "event": "jev",
+        "action": "jev_call" if info.get("ok") else "jev_error",
+        "target": target, "path": path,
+        "endpoint": safe_endpoint(jev_cfg.get("endpoint")),
+        "model": jev_cfg.get("model") or JEV_DEFAULT_MODEL,
+        "questionType": jev_cfg.get("questionType") or "noul",
+        "status": info.get("status"), "ms": info.get("ms"), "inputChars": info.get("inputChars"),
+        "scores": info.get("scores"), "answers": info.get("answers"), "error": info.get("error"),
+    }
+    append_audit(root, {k: v for k, v in evt.items() if v is not None})
+
+
+def sanitize_error_message(msg: str) -> str:
+    """Redact quoted fragments (parse errors may quote the input, e.g. a pasted secret); cap the length."""
+    return re.sub(r"\"[^\"]*\"|'[^']*'|`[^`]*`", '"…"', msg or "")[:300]
+
+
+def log_internal_error(root: str, tool: str, command: str, exc: BaseException) -> None:
+    """Unexpected internal error in a command (event "error"); stack keeps only file:line frames."""
+    import traceback
+    frames = traceback.extract_tb(exc.__traceback__)[-5:]
+    stack = " | ".join("{}:{} in {}".format(os.path.basename(f.filename), f.lineno, f.name) for f in frames)
+    append_audit(root, {
+        "ts": _now_iso(), "tool": tool, "event": "error", "action": "error", "command": command,
+        "error": "{}: {}".format(type(exc).__name__, sanitize_error_message(str(exc))),
+        "stack": stack or None,
+    })
 
 
 def parse_jev_score(description: str):
@@ -680,7 +814,8 @@ def cmd_check_prompt(args: list, stdin_text: str) -> int:
     # JEV / OpenJEV (optional, off by default, fail-open); skipped when the regex engine already blocks
     jev_scores: dict = {}
     jev_findings = [] if any(f["severity"] == "block" for f in findings) \
-        else scan_with_jev(prompt, cfg["jev"])
+        else scan_with_jev(prompt, cfg["jev"],
+                           on_call=lambda info: log_jev_call(project_root, tool, "prompt", cfg["jev"], info))
     for f in jev_findings:
         score = parse_jev_score(f["description"])
         if score is not None:
@@ -718,8 +853,10 @@ def cmd_check_prompt(args: list, stdin_text: str) -> int:
         "rule": blocks[0]["ruleId"], "preview": blocks[0]["preview"], "count": len(blocks),
         **_src(blocks[0]),
     })
+    what = ("prompt-injection / exfiltration attempt detected"
+            if all(f["ruleId"] == "jev-unauthorized-access" for f in blocks) else "credential detected")
     lines = [
-        "ai-guard: BLOCKED — credential detected in prompt (not sent to AI).",
+        "ai-guard: BLOCKED — {} in prompt (not sent to AI).".format(what),
     ]
     for f in blocks[:5]:
         lines.append("  • {}: {} [preview: {}]".format(f["ruleId"], f["description"], f["preview"]))
@@ -834,7 +971,9 @@ def _scan_files_with_jev(project_root: str, tool: str, candidates: list, jev_cfg
                 content = f.read()
         except OSError:
             continue  # unreadable -> fail-open
-        findings = scan_with_jev(content, jev_cfg)
+        findings = scan_with_jev(
+            content, jev_cfg,
+            on_call=lambda info, rel=rel: log_jev_call(project_root, tool, "file", jev_cfg, info, rel))
         if not findings:
             continue
         block = next((f for f in findings if f["severity"] == "block"), None)
@@ -1026,6 +1165,26 @@ def main(argv=None) -> int:
             "usage: engine.py <check-prompt|check-file|allow|self-test>\n")
         return 1
     ns, extra = parser.parse_known_args(argv)
+    try:
+        return _dispatch(command, extra)
+    except Exception as exc:  # noqa: BLE001 - unexpected crash: record it, fail open for hook commands
+        try:
+            root_arg = flag_value(extra, "--root")
+            project_root = find_root(root_arg if root_arg is not None else os.getcwd())
+            if project_root is not None:
+                log_internal_error(project_root, flag_value(extra, "--tool") or "unknown", command, exc)
+            msg = "{}: {}".format(type(exc).__name__, sanitize_error_message(str(exc)))
+            if command in STDIN_COMMANDS:
+                sys.stderr.write("ai-guard: internal error in {} ({}) — check SKIPPED (fail-open). "
+                                 "Details: .ai-guard/logs/\n".format(command, msg))
+            else:
+                sys.stderr.write("ai-guard: internal error in {} ({}). Details: .ai-guard/logs/\n".format(command, msg))
+        except Exception:  # noqa: BLE001 - reporting must never raise
+            pass
+        return 0 if command in STDIN_COMMANDS else 1
+
+
+def _dispatch(command: str, extra: list) -> int:
     if command in STDIN_COMMANDS:
         stdin_text = _read_stdin()
         if command == "check-prompt":

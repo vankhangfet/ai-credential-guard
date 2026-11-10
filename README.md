@@ -74,7 +74,7 @@ export JEV_API_KEY=...   # omit for a local unauthenticated server
 - **Start in `warn` mode** and review the audit log. Switch to `"block"` once you trust the scores.
 - **Use it as a complement, not a replacement.** In testing, injection prompts scored ~1.00, but fake-looking passwords scored only ~0.50.
 - **Self-hosted servers:** set `model` to the id your server reports (`GET /v1/models`) and raise `timeoutMs` (e.g. `10000`) — a cold local model can be slow on its first call. Use `apiKeyEnv` to read the key from a different environment variable (default `JEV_API_KEY`).
-- **Choice-only gateways:** some servers reject `noul` questions with `unsupported_question_type`. Set `"questionType": "choice"` and the guard asks the same questions as `yes` / `no` choices instead. Because the check fails open silently, test a new endpoint with a direct request (e.g. `curl`) first to see the server's error messages.
+- **Choice-only gateways:** some servers reject `noul` questions with `unsupported_question_type`. Set `"questionType": "choice"` and the guard asks the same questions as `yes` / `no` choices instead. Because the check fails open silently, run `npx ai-guard doctor` after setup. It sends one harmless test request and shows the server's real answer (e.g. `HTTP 401: Invalid API key`, `Only model '…' is supported`).
 - **Privacy:** prompt text and file content are sent to the endpoint. Prefer self-hosted for sensitive code.
 - **Python fallback:** supported too, using the same `.ai-guard/config.json` and the same settings. It uses only the Python standard library — no extra install.
 
@@ -95,7 +95,9 @@ export JEV_API_KEY=...   # omit for a local unauthenticated server
 
 ## Good to know
 
-- **Audit log** is in `.ai-guard/logs/`. Secrets are always masked, and every block, warning and bypass is recorded. JEV events carry `"source":"jev"` and a `"score"`.
+- **Audit log** is in `.ai-guard/logs/` (one JSONL file per UTC day). Secrets are always masked, and every block, warning and bypass is recorded. JEV events carry `"source":"jev"` and a `"score"`.
+- **JEV call log:** every JEV / OpenJEV request gets its own `"event":"jev"` record: `jev_call` on success (HTTP status, time in ms, score per question, the server's `answers`) or `jev_error` on failure (server error message, timeout, network error). Prompt text, file content and the API key are never logged; credentials or query strings in the endpoint URL are stripped.
+- **Internal errors** are logged as `"event":"error"` (command, message, stack frames) and printed to stderr; prompt and file checks still fail open.
 - **Fail-open:** if the engine fails, your tool keeps working. The exception is Kiro CLI 3.x, where a failing hook blocks every tool call. Fix it with `npm i -D ai-credential-guard`.
 - **Install locally** for ~0.3–0.5 s per check.
 - **No Node.js?** A [Python fallback](https://github.com/vankhangfet/ai-credential-guard/releases) covers Claude Code and Codex only, including the optional JEV / OpenJEV check.

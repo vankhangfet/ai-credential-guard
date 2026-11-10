@@ -4,10 +4,39 @@
 // while the POSIX shim execs the raw file → sh parses JS → exit 2 (blocks every prompt).
 
 export async function runCli(argv: string[], input: string): Promise<number> {
+  try {
+    return await dispatchCommand(argv, input);
+  } catch (e) {
+    return handleInternalError(argv, e);
+  }
+}
+
+// Unexpected crash inside a command: record it in the audit log and on stderr. Hook commands (check-prompt /
+// check-file) fail OPEN (exit 0) so a guard bug never blocks the user's workflow; other commands exit 1.
+async function handleInternalError(argv: string[], e: unknown): Promise<number> {
+  const command = argv[0] ?? "";
+  try {
+    const [{ findProjectRoot }, { logInternalError, sanitizeErrorMessage }, { flagValue }] = await Promise.all([
+      import("./root"), import("./audit/log"), import("./util/argv"),
+    ]);
+    const root = findProjectRoot(flagValue(argv, "--root") ?? process.cwd());
+    if (root) logInternalError(root, flagValue(argv, "--tool") ?? "unknown", command, e);
+    const msg = sanitizeErrorMessage((e as { message?: string })?.message ?? String(e));
+    process.stderr.write(
+      STDIN_COMMANDS.has(command)
+        ? `ai-guard: internal error in ${command} (${msg}) — check SKIPPED (fail-open). Details: .ai-guard/logs/\n`
+        : `ai-guard: internal error in ${command} (${msg}). Details: .ai-guard/logs/\n`,
+    );
+  } catch { /* reporting must never throw */ }
+  return STDIN_COMMANDS.has(command) ? 0 : 1;
+}
+
+async function dispatchCommand(argv: string[], input: string): Promise<number> {
   const command = argv[0];
   switch (command) {
     case "version":
-      console.log("ai-guard 1.3.1");
+      // read from package.json so the printed version can never drift from the published one
+      console.log(`ai-guard ${require("../package.json").version}`);
       return 0;
     case "check-prompt":
       return (await import("./commands/check-prompt")).checkPrompt(argv.slice(1), input);

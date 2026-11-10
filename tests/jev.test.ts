@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scanWithJev } from "../src/engine/jev";
+import { scanWithJev, probeJev } from "../src/engine/jev";
 import type { JevConfig } from "../src/types";
 
 const baseCfg: JevConfig = {
@@ -17,7 +17,8 @@ function fakeFetch(json: unknown, ok = true, capture?: (url: string, init: any) 
     capture?.(url, init);
     return {
       ok,
-      json: async () => json,
+      status: ok ? 200 : 500,
+      text: async () => JSON.stringify(json),
     } as any;
   }) as any;
 }
@@ -25,7 +26,7 @@ function fakeFetch(json: unknown, ok = true, capture?: (url: string, init: any) 
 describe("scanWithJev", () => {
   it("disabled -> returns [] and does NOT call fetch", async () => {
     let called = false;
-    const f = (async () => { called = true; return { ok: true, json: async () => ({}) } as any; }) as any;
+    const f = (async () => { called = true; return { ok: true, status: 200, text: async () => "{}" } as any; }) as any;
     const out = await scanWithJev("AKIA...", { ...baseCfg, enabled: false }, f);
     expect(out).toEqual([]);
     expect(called).toBe(false);
@@ -33,7 +34,7 @@ describe("scanWithJev", () => {
 
   it("empty text -> [] without calling fetch", async () => {
     let called = false;
-    const f = (async () => { called = true; return { ok: true, json: async () => ({}) } as any; }) as any;
+    const f = (async () => { called = true; return { ok: true, status: 200, text: async () => "{}" } as any; }) as any;
     expect(await scanWithJev("   ", baseCfg, f)).toEqual([]);
     expect(called).toBe(false);
   });
@@ -156,5 +157,46 @@ describe("scanWithJev", () => {
     const f = fakeFetch({ answers: [] }, true, (_u, i) => { seenInit = i; });
     await scanWithJev("hello", baseCfg, f);
     expect(seenInit.headers.authorization).toBeUndefined();
+  });
+});
+
+describe("probeJev (doctor connectivity check)", () => {
+  const res = (status: number, body: string) => (async () => ({ ok: status >= 200 && status < 300, status, text: async () => body })) as any;
+
+  it("disabled -> not ok, no request", async () => {
+    expect((await probeJev({ ...baseCfg, enabled: false })).ok).toBe(false);
+  });
+
+  it("valid choice answer -> ok", async () => {
+    const body = JSON.stringify({ answers: { "jev-credential": { type: "choice", choice: "no", probabilities: { yes: 0, no: 1 } } } });
+    const r = await probeJev({ ...baseCfg, questionType: "choice" }, res(200, body));
+    expect(r.ok).toBe(true);
+  });
+
+  it("server error message is surfaced (unsupported question type)", async () => {
+    const body = JSON.stringify({ error: { code: "unsupported_question_type", message: "Only question type 'choice' is supported." } });
+    const r = await probeJev(baseCfg, res(400, body));
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain("HTTP 400");
+    expect(r.detail).toContain("Only question type 'choice' is supported.");
+  });
+
+  it("401 -> hint about the API key env var", async () => {
+    const r = await probeJev(baseCfg, res(401, ""));
+    expect(r.detail).toContain("(empty body)");
+    expect(r.detail).toContain("JEV_API_KEY");
+  });
+
+  it("200 with unparseable shape -> not ok", async () => {
+    const r = await probeJev(baseCfg, res(200, "<html>login</html>"));
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain("unsupported response shape");
+  });
+
+  it("network error -> not ok, never throws", async () => {
+    const f = (async () => { throw Object.assign(new Error("fetch failed"), { cause: { code: "ECONNREFUSED" } }); }) as any;
+    const r = await probeJev(baseCfg, f);
+    expect(r.ok).toBe(false);
+    expect(r.detail).toContain("ECONNREFUSED");
   });
 });

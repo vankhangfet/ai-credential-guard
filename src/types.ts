@@ -50,12 +50,16 @@ export interface AiGuardConfig {
   jev?: JevConfig;           // optional external decision API (default disabled)
 }
 
-export type AuditAction = "blocked" | "warned" | "bypass_granted" | "allowed_after_confirm";
+export type AuditAction =
+  | "blocked" | "warned" | "bypass_granted" | "allowed_after_confirm"
+  | "jev_call"   // one successful request to the JEV / OpenJEV decision API (event "jev")
+  | "jev_error"  // a failed request (HTTP error, timeout, network, unparseable response) — check failed open
+  | "error";     // unexpected internal error in a command (event "error") — check failed open
 
 export interface AuditEvent {
   ts: string;
   tool: string;
-  event: "prompt" | "file" | "bypass";
+  event: "prompt" | "file" | "bypass" | "jev" | "error";
   action: AuditAction;
   rule?: string;
   preview?: string;
@@ -65,4 +69,18 @@ export interface AuditEvent {
   count?: number;
   source?: "engine" | "jev"; // finding came from the regex engine or the JEV decision API
   score?: number;            // calibrated probability 0..1 returned by JEV (only when source="jev")
+  // --- event "jev" (one record per decision-API request; never contains the text, response body or key)
+  target?: "prompt" | "file" | "doctor"; // what triggered the call
+  endpoint?: string;         // endpoint URL without userinfo / query string
+  model?: string;
+  questionType?: string;
+  status?: number;           // HTTP status (absent when no response arrived)
+  ms?: number;               // round-trip time
+  inputChars?: number;       // size of the evaluated text
+  scores?: Record<string, number>; // P(yes) per question
+  answers?: string;          // JSON of the response "answers" object (truncated)
+  // --- event "jev" (jev_error) and event "error"
+  error?: string;
+  command?: string;          // event "error": the CLI command that failed
+  stack?: string;            // event "error": top stack frames (file:line only)
 }
