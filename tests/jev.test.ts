@@ -200,3 +200,62 @@ describe("probeJev (doctor connectivity check)", () => {
     expect(r.detail).toContain("ECONNREFUSED");
   });
 });
+
+describe("question-type auto-detection", () => {
+  const { mkdtempSync, existsSync, readFileSync } = require("node:fs");
+  const { tmpdir } = require("node:os");
+  const { join } = require("node:path");
+
+  // Simulated choice-only gateway: rejects noul like prdcv-de-systemone does, answers choice.
+  function choiceOnlyServer(sentTypes: string[]): typeof fetch {
+    return (async (_u: string, init: any) => {
+      const body = JSON.parse(init.body);
+      const t = (Object.values(body.questions)[0] as any).type;
+      sentTypes.push(t);
+      if (t !== "choice") {
+        return { ok: false, status: 400, text: async () => JSON.stringify({ error: { type: "invalid_request_error", code: "unsupported_question_type", message: "Only question type 'choice' is supported." } }) };
+      }
+      const answers = Object.fromEntries(Object.keys(body.questions).map((id) => [id, { type: "choice", choice: "yes", probabilities: { yes: 0.99, no: 0.01 } }]));
+      return { ok: true, status: 200, text: async () => JSON.stringify({ answers }) };
+    }) as any;
+  }
+
+  it("default noul rejected -> retries with choice, finds result, reports both calls, caches choice", async () => {
+    const cacheFile = join(mkdtempSync(join(tmpdir(), "aig-qt-")), "logs", ".jev-question-type.json");
+    const sent: string[] = [];
+    const calls: any[] = [];
+    const out = await scanWithJev("x", { ...baseCfg, mode: "block" }, choiceOnlyServer(sent), (i) => calls.push(i), { cacheFile });
+    expect(sent).toEqual(["noul", "choice"]);
+    expect(out.length).toBe(2);
+    expect(calls.map((c) => [c.ok, c.questionType, c.fallbackFrom])).toEqual([[false, "noul", undefined], [true, "choice", "noul"]]);
+    expect(existsSync(cacheFile)).toBe(true);
+    expect(JSON.parse(readFileSync(cacheFile, "utf8"))["http://localhost:8000/decide|jev-latest"]).toBe("choice");
+
+    // next check (new process in real life): goes straight to the remembered type — no failed request
+    const sent2: string[] = [];
+    await scanWithJev("y", baseCfg, choiceOnlyServer(sent2), undefined, { cacheFile });
+    expect(sent2).toEqual(["choice"]);
+  });
+
+  it("no retry for other errors (e.g. unsupported model, 401)", async () => {
+    let n = 0;
+    const f = (async () => { n++; return { ok: false, status: 400, text: async () => JSON.stringify({ error: { code: "unsupported_model", message: "Only model 'm' is supported." } }) }; }) as any;
+    expect(await scanWithJev("x", baseCfg, f)).toEqual([]);
+    expect(n).toBe(1);
+  });
+
+  it("cache key never contains endpoint credentials", async () => {
+    const cacheFile = join(mkdtempSync(join(tmpdir(), "aig-qt-")), ".jev-question-type.json");
+    await scanWithJev("x", { ...baseCfg, endpoint: "https://u:hunter2@gw.example/v1/systemone?key=s3cret" }, choiceOnlyServer([]), undefined, { cacheFile });
+    const raw = readFileSync(cacheFile, "utf8");
+    expect(raw).toContain("https://gw.example/v1/systemone|jev-latest");
+    expect(raw).not.toContain("hunter2");
+    expect(raw).not.toContain("s3cret");
+  });
+
+  it("doctor probe explains the automatic switch", async () => {
+    const r = await probeJev(baseCfg, choiceOnlyServer([]));
+    expect(r.ok).toBe(true);
+    expect(r.detail).toContain('switched to "choice" automatically');
+  });
+});

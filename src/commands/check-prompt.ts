@@ -1,6 +1,6 @@
 import { loadRules, loadConfig } from "../engine/loader";
 import { scanText } from "../engine/scanner";
-import { scanWithJev } from "../engine/jev";
+import { scanWithJev, jevCacheFile } from "../engine/jev";
 import { appendAuditEvent, logJevCall } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { findProjectRoot } from "../root";
@@ -44,7 +44,7 @@ export async function checkPrompt(argv: string[], input: string): Promise<number
   const jevScores = new Map<string, number>();
   const jevFindings = findings.some((f) => f.severity === "block")
     ? []
-    : await scanWithJev(prompt, cfg.jev, undefined, (info) => logJevCall(projectRoot, tool, "prompt", cfg.jev, info));
+    : await scanWithJev(prompt, cfg.jev, undefined, (info) => logJevCall(projectRoot, tool, "prompt", cfg.jev, info), { cacheFile: jevCacheFile(projectRoot) });
   for (const f of jevFindings) {
     const score = parseJevScore(f.description);
     if (score !== null) jevScores.set(f.ruleId, score);

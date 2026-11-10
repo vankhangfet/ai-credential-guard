@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { findProjectRoot } from "../root";
 import { loadConfig } from "../engine/loader";
 import { isSensitivePath, normalizePath } from "../engine/paths";
-import { scanWithJev } from "../engine/jev";
+import { scanWithJev, jevCacheFile } from "../engine/jev";
 import { appendAuditEvent, logJevCall } from "../audit/log";
 import { hasValidBypass } from "../bypass/store";
 import { flagValue } from "../util/argv";
@@ -140,7 +140,7 @@ async function scanCandidatesWithJev(projectRoot: string, tool: string, rels: st
     } catch {
       continue; // unreadable -> fail-open
     }
-    const findings = await scanWithJev(content, cfg.jev, undefined, (info) => logJevCall(projectRoot, tool, "file", cfg.jev, info, rel));
+    const findings = await scanWithJev(content, cfg.jev, undefined, (info) => logJevCall(projectRoot, tool, "file", cfg.jev, info, rel), { cacheFile: jevCacheFile(projectRoot) });
     if (!findings.length) continue;
     const block = findings.find((f) => f.severity === "block");
     const first = block ?? findings[0];

@@ -45,7 +45,8 @@ export function logJevCall(
     path,
     endpoint: safeEndpoint(cfg?.endpoint),
     model: cfg?.model || "jev-latest",
-    questionType: cfg?.questionType ?? "noul",
+    questionType: info.questionType ?? cfg?.questionType ?? "noul", // type actually sent in this request
+    fallbackFrom: info.fallbackFrom,
     status: info.status,
     ms: info.ms,
     inputChars: info.inputChars,
