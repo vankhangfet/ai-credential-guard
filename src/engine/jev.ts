@@ -1,4 +1,6 @@
 import type { Finding, JevConfig } from "../types";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { maskSecret } from "./mask";
 
 // JEV / OpenJEV integration (and any compatible openjev-server): a "decision API" that takes unstructured
@@ -55,8 +57,54 @@ export interface JevCallInfo {
   answers?: string;                // JSON of the response "answers" object only (truncated), on success
   error?: string;                  // human-readable failure reason (server message, timeout, network, shape)
   inputChars: number;              // length of the evaluated text (the text itself is never logged)
+  questionType: QuestionType;      // question type actually sent in this request
+  fallbackFrom?: QuestionType;     // set on the automatic retry after the server rejected this type
 }
 export type JevCallHook = (info: JevCallInfo) => void;
+type QuestionType = "noul" | "choice";
+
+/** Options that need the project root (the hooks and doctor pass them). */
+export interface JevRunOptions {
+  // file remembering which question type works per endpoint+model (auto-detected); omit to disable the cache
+  cacheFile?: string;
+}
+
+// Cache lives in the logs dir: already gitignored by `init`, and wiped together with the logs by `uninstall --purge`.
+export function jevCacheFile(projectRoot: string): string {
+  return join(projectRoot, ".ai-guard", "logs", ".jev-question-type.json");
+}
+
+// endpoint without userinfo / query string (never persist a credential embedded in the URL) + model
+function cacheKey(cfg: JevConfig): string {
+  let ep = cfg.endpoint ?? "";
+  try { const u = new URL(ep); ep = `${u.protocol}//${u.host}${u.pathname}`; } catch { /* keep as-is */ }
+  return `${ep}|${cfg.model || DEFAULT_MODEL}`;
+}
+
+function readCachedType(file: string | undefined, key: string): QuestionType | undefined {
+  if (!file) return undefined;
+  try {
+    const v = (JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>)[key];
+    return v === "choice" || v === "noul" ? v : undefined;
+  } catch { return undefined; }
+}
+
+function writeCachedType(file: string | undefined, key: string, type: QuestionType): void {
+  if (!file) return;
+  try {
+    let data: Record<string, unknown> = {};
+    try { data = JSON.parse(readFileSync(file, "utf8")); } catch { /* new file */ }
+    data[key] = type;
+    mkdirSync(dirname(file), { recursive: true });
+    writeFileSync(file, JSON.stringify(data, null, 2) + "\n");
+  } catch { /* cache is an optimisation only */ }
+}
+
+// The server rejected the question TYPE (e.g. 400 unsupported_question_type "Only question type 'choice' is
+// supported.") — the only failure where retrying with the other type can help.
+function isUnsupportedQuestionType(info: JevCallInfo): boolean {
+  return info.status === 400 && /question[ _-]?type/i.test(info.error ?? "");
+}
 
 const MAX_LOGGED_CHARS = 500;
 const truncate = (s: string, n = MAX_LOGGED_CHARS) => (s.length > n ? s.slice(0, n) + "…" : s);
@@ -86,7 +134,7 @@ async function callJev(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const t0 = Date.now();
-  const base = { inputChars: state.length };
+  const base = { inputChars: state.length, questionType: (cfg.questionType === "choice" ? "choice" : "noul") as QuestionType };
   let status: number | undefined;
   try {
     const res = await fetchImpl(cfg.endpoint, { method: "POST", headers, body: JSON.stringify(body), signal: controller.signal });
@@ -127,24 +175,49 @@ function report(onCall: JevCallHook | undefined, info: JevCallInfo): void {
   try { onCall?.(info); } catch { /* logging must never break the check */ }
 }
 
+// Question-type auto-detection. Start with the remembered type for this endpoint+model (cache), else the configured
+// one (default "noul"). If the server rejects the TYPE, retry ONCE with the other type; when that works, remember
+// it so later checks (each hook is a new process) go straight to the working type. Every request is reported.
+async function callWithFallback(
+  state: string,
+  cfg: JevConfig & { endpoint: string },
+  qs: typeof QUESTIONS,
+  fetchImpl: typeof fetch,
+  onCall: JevCallHook | undefined,
+  opts: JevRunOptions | undefined,
+): Promise<JevCallInfo> {
+  const key = cacheKey(cfg);
+  const first: QuestionType = readCachedType(opts?.cacheFile, key) ?? (cfg.questionType === "choice" ? "choice" : "noul");
+  const info = await callJev(state, { ...cfg, questionType: first }, qs, fetchImpl);
+  report(onCall, info);
+  if (info.ok || !isUnsupportedQuestionType(info)) return info;
+  const alt: QuestionType = first === "choice" ? "noul" : "choice";
+  const retry = await callJev(state, { ...cfg, questionType: alt }, qs, fetchImpl);
+  retry.fallbackFrom = first;
+  report(onCall, retry);
+  if (retry.ok) writeCachedType(opts?.cacheFile, key, alt);
+  return retry;
+}
+
 /**
  * Runs the JEV decision API on a piece of text. Returns Finding[] (possibly empty). Never throws.
  * @param text   content to evaluate (a prompt, or file content)
  * @param cfg    JevConfig already normalized by loadConfig
  * @param fetchImpl  injectable for tests (defaults to Node >=20 global fetch)
  * @param onCall     called once per request with the outcome (used for audit logging)
+ * @param opts       cacheFile for question-type auto-detection (see callWithFallback)
  */
 export async function scanWithJev(
   text: string,
   cfg: JevConfig | undefined,
   fetchImpl: typeof fetch = fetch,
   onCall?: JevCallHook,
+  opts?: JevRunOptions,
 ): Promise<Finding[]> {
   if (!cfg?.enabled || !cfg.endpoint || !text.trim()) return [];
   const threshold = cfg.threshold ?? 0.8;
   const severity = cfg.mode ?? "warn";
-  const info = await callJev(text, { ...cfg, endpoint: cfg.endpoint }, QUESTIONS, fetchImpl);
-  report(onCall, info);
+  const info = await callWithFallback(text, { ...cfg, endpoint: cfg.endpoint }, QUESTIONS, fetchImpl, onCall, opts);
   if (!info.ok || !info.scores) return []; // any failure -> fail-open (already reported via onCall)
 
   const findings: Finding[] = [];
@@ -172,17 +245,24 @@ export async function probeJev(
   cfg: JevConfig | undefined,
   fetchImpl: typeof fetch = fetch,
   onCall?: JevCallHook,
+  opts?: JevRunOptions,
 ): Promise<{ ok: boolean; detail: string }> {
   if (!cfg?.enabled || !cfg.endpoint) return { ok: false, detail: "disabled" };
-  const info = await callJev(
+  const info = await callWithFallback(
     "ai-guard doctor connectivity check (benign text, no secret)",
     { ...cfg, endpoint: cfg.endpoint },
     [QUESTIONS[0]],
     fetchImpl,
+    onCall,
+    opts,
   );
-  report(onCall, info);
   const prefix = info.status !== undefined ? `HTTP ${info.status} in ${info.ms}ms` : "";
-  if (info.ok) return { ok: true, detail: `${prefix}, response parsed` };
+  if (info.ok) {
+    const note = info.fallbackFrom
+      ? ` (server rejected questionType "${info.fallbackFrom}" — switched to "${info.questionType}" automatically and remembered it; set "jev.questionType": "${info.questionType}" in .ai-guard/config.json to skip the retry)`
+      : "";
+    return { ok: true, detail: `${prefix}, response parsed, questionType=${info.questionType}${note}` };
+  }
   return { ok: false, detail: prefix ? `${prefix}: ${info.error}` : info.error ?? "unknown error" };
 }
 

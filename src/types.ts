@@ -74,6 +74,7 @@ export interface AuditEvent {
   endpoint?: string;         // endpoint URL without userinfo / query string
   model?: string;
   questionType?: string;
+  fallbackFrom?: string;     // automatic retry: the question type the server rejected just before
   status?: number;           // HTTP status (absent when no response arrived)
   ms?: number;               // round-trip time
   inputChars?: number;       // size of the evaluated text

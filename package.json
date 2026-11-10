@@ -1,6 +1,6 @@
 {
   "name": "ai-credential-guard",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Stop credentials from leaking to AI models — block them before they leave your machine.",
   "type": "commonjs",
   "license": "MIT",

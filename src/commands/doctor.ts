@@ -2,7 +2,7 @@ import { allAdapters } from "../adapters"; // import barrel to trigger adapter r
 import { selfTest, printSelfTest } from "./self-test";
 import { findProjectRoot } from "../root";
 import { loadRules, loadConfig } from "../engine/loader";
-import { probeJev } from "../engine/jev";
+import { probeJev, jevCacheFile } from "../engine/jev";
 import { logJevCall } from "../audit/log";
 import { flagValue } from "../util/argv";
 
@@ -34,7 +34,7 @@ export async function doctor(argv: string[]): Promise<number> {
       if (!cfg.jev.model) console.log("  ⚠ jev.model not set — using \"jev-latest\". Self-hosted servers (e.g. Ollama/OpenJev) need their own model id, else requests 404 and the check silently fails open.");
       console.log(`  ${hasKey ? "✓" : "⚠"} API key env ${keyVar}: ${hasKey ? "set" : "not set (sending unauthenticated — ok for local openjev-server)"}`);
       // live probe — the check itself fails open silently, so surface the server's real answer here
-      const probe = await probeJev(cfg.jev, undefined, (info) => logJevCall(root, "doctor", "doctor", cfg.jev, info));
+      const probe = await probeJev(cfg.jev, undefined, (info) => logJevCall(root, "doctor", "doctor", cfg.jev, info), { cacheFile: jevCacheFile(root) });
       console.log(`  ${probe.ok ? "✓" : "✗"} endpoint check: ${probe.detail}`);
       if (!probe.ok) {
         allOk = false;

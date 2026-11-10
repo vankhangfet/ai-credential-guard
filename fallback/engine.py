@@ -369,7 +369,8 @@ def call_jev(text: str, jev_cfg: dict, qs: list, urlopen=None) -> dict:
     Never carries the request text, the raw response body on success, or the API key.
     """
     t0 = time.time()
-    info = {"ok": False, "inputChars": len(text)}
+    info = {"ok": False, "inputChars": len(text),
+            "questionType": "choice" if jev_cfg.get("questionType") == "choice" else "noul"}
     status = None
     try:
         opener = urlopen or urllib.request.urlopen
@@ -434,22 +435,80 @@ def call_jev(text: str, jev_cfg: dict, qs: list, urlopen=None) -> dict:
             info["status"] = status
 
 
-def scan_with_jev(text: str, jev_cfg, urlopen=None, on_call=None) -> list:
+def jev_cache_file(root: str) -> str:
+    """Remembered question type per endpoint+model (logs dir: gitignored by init, purged with the logs)."""
+    return os.path.join(root, ".ai-guard", "logs", ".jev-question-type.json")
+
+
+def _jev_cache_key(jev_cfg: dict) -> str:
+    # endpoint without userinfo / query string: never persist a credential embedded in the URL
+    return "{}|{}".format(safe_endpoint(jev_cfg.get("endpoint")) or "", jev_cfg.get("model") or JEV_DEFAULT_MODEL)
+
+
+def _read_cached_type(cache_file, key):
+    data = _read_json_safe(cache_file) if cache_file else None
+    v = data.get(key) if isinstance(data, dict) else None
+    return v if v in ("noul", "choice") else None
+
+
+def _write_cached_type(cache_file, key, qtype) -> None:
+    if not cache_file:
+        return
+    try:
+        data = _read_json_safe(cache_file)
+        data = data if isinstance(data, dict) else {}
+        data[key] = qtype
+        os.makedirs(os.path.dirname(cache_file), exist_ok=True)
+        with open(cache_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(data, indent=2) + "\n")
+    except OSError:
+        pass  # cache is an optimisation only
+
+
+def _is_unsupported_question_type(info: dict) -> bool:
+    return info.get("status") == 400 and re.search(r"question[ _-]?type", info.get("error") or "", re.I) is not None
+
+
+def call_jev_with_fallback(text: str, jev_cfg: dict, qs: list, urlopen=None, on_call=None, cache_file=None) -> dict:
+    """Question-type auto-detection (mirror callWithFallback in src/engine/jev.ts).
+
+    Start with the remembered type (cache) else the configured one; if the server rejects the TYPE, retry once
+    with the other type and remember it when that works. Every request is reported via on_call.
+    """
+    def _report(i):
+        if on_call is not None:
+            try:
+                on_call(i)
+            except Exception:  # noqa: BLE001 - logging must never break the check
+                pass
+
+    key = _jev_cache_key(jev_cfg)
+    first = _read_cached_type(cache_file, key) or ("choice" if jev_cfg.get("questionType") == "choice" else "noul")
+    info = call_jev(text, dict(jev_cfg, questionType=first), qs, urlopen)
+    _report(info)
+    if info.get("ok") or not _is_unsupported_question_type(info):
+        return info
+    alt = "noul" if first == "choice" else "choice"
+    retry = call_jev(text, dict(jev_cfg, questionType=alt), qs, urlopen)
+    retry["fallbackFrom"] = first
+    _report(retry)
+    if retry.get("ok"):
+        _write_cached_type(cache_file, key, alt)
+    return retry
+
+
+def scan_with_jev(text: str, jev_cfg, urlopen=None, on_call=None, cache_file=None) -> list:
     """Run the JEV decision API on text. Returns findings (possibly empty). Never raises.
 
-    on_call(info) is invoked once per request with the call outcome (used for audit logging).
+    on_call(info) is invoked once per request with the call outcome (used for audit logging);
+    cache_file enables question-type auto-detection memory (see call_jev_with_fallback).
     """
     try:
         if not isinstance(jev_cfg, dict) or not jev_cfg.get("enabled") or not jev_cfg.get("endpoint"):
             return []
         if not text.strip():
             return []
-        info = call_jev(text, jev_cfg, JEV_QUESTIONS, urlopen)
-        if on_call is not None:
-            try:
-                on_call(info)
-            except Exception:  # noqa: BLE001 - logging must never break the check
-                pass
+        info = call_jev_with_fallback(text, jev_cfg, JEV_QUESTIONS, urlopen, on_call, cache_file)
         if not info.get("ok"):
             return []  # any failure -> fail-open (already reported via on_call)
         findings = []
@@ -490,7 +549,8 @@ def log_jev_call(root: str, tool: str, target: str, jev_cfg: dict, info: dict, p
         "target": target, "path": path,
         "endpoint": safe_endpoint(jev_cfg.get("endpoint")),
         "model": jev_cfg.get("model") or JEV_DEFAULT_MODEL,
-        "questionType": jev_cfg.get("questionType") or "noul",
+        "questionType": info.get("questionType") or jev_cfg.get("questionType") or "noul",
+        "fallbackFrom": info.get("fallbackFrom"),
         "status": info.get("status"), "ms": info.get("ms"), "inputChars": info.get("inputChars"),
         "scores": info.get("scores"), "answers": info.get("answers"), "error": info.get("error"),
     }
@@ -815,7 +875,8 @@ def cmd_check_prompt(args: list, stdin_text: str) -> int:
     jev_scores: dict = {}
     jev_findings = [] if any(f["severity"] == "block" for f in findings) \
         else scan_with_jev(prompt, cfg["jev"],
-                           on_call=lambda info: log_jev_call(project_root, tool, "prompt", cfg["jev"], info))
+                           on_call=lambda info: log_jev_call(project_root, tool, "prompt", cfg["jev"], info),
+                           cache_file=jev_cache_file(project_root))
     for f in jev_findings:
         score = parse_jev_score(f["description"])
         if score is not None:
@@ -973,7 +1034,8 @@ def _scan_files_with_jev(project_root: str, tool: str, candidates: list, jev_cfg
             continue  # unreadable -> fail-open
         findings = scan_with_jev(
             content, jev_cfg,
-            on_call=lambda info, rel=rel: log_jev_call(project_root, tool, "file", jev_cfg, info, rel))
+            on_call=lambda info, rel=rel: log_jev_call(project_root, tool, "file", jev_cfg, info, rel),
+            cache_file=jev_cache_file(project_root))
         if not findings:
             continue
         block = next((f for f in findings if f["severity"] == "block"), None)
