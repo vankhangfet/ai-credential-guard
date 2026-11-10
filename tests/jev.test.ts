@@ -58,6 +58,29 @@ describe("scanWithJev", () => {
     expect(await scanWithJev("x", baseCfg, fakeFetch(json))).toEqual([]);
   });
 
+  it("default questionType sends noul questions with true/false criteria", async () => {
+    let sent: any;
+    await scanWithJev("x", baseCfg, fakeFetch({}, true, (_u, init) => { sent = JSON.parse(init.body); }));
+    expect(sent.questions["jev-credential"].type).toBe("noul");
+    expect(Object.keys(sent.questions["jev-credential"].criteria)).toEqual(["true", "false"]);
+  });
+
+  it("questionType=choice sends yes/no options and reads probabilities.yes", async () => {
+    let sent: any;
+    // response shape captured from a choice-only gateway (prdcv-de-systemone)
+    const json = { model: "m", answers: {
+      "jev-credential": { type: "choice", choice: "no", confidence: 0.9971, probabilities: { yes: 0.0014, no: 0.9986 } },
+      "jev-unauthorized-access": { type: "choice", choice: "yes", confidence: 0.9997, probabilities: { yes: 0.9999, no: 0.0001 } },
+    } };
+    const out = await scanWithJev("x", { ...baseCfg, questionType: "choice", mode: "block" },
+      fakeFetch(json, true, (_u, init) => { sent = JSON.parse(init.body); }));
+    expect(sent.questions["jev-credential"].type).toBe("choice");
+    expect(Object.keys(sent.questions["jev-credential"].criteria)).toEqual(["yes", "no"]);
+    expect(out.map((f) => f.ruleId)).toEqual(["jev-unauthorized-access"]);
+    expect(out[0].severity).toBe("block");
+    expect(out[0].description).toContain("100% confidence");
+  });
+
   it("probabilities{yes,no} shape is parsed correctly", async () => {
     const json = { results: [{ id: "jev-unauthorized-access", probabilities: { yes: 0.88, no: 0.12 } }] };
     const out = await scanWithJev("x", baseCfg, fakeFetch(json));

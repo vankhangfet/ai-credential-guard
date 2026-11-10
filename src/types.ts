@@ -38,6 +38,9 @@ export interface JevConfig {
   mode?: Severity;           // severity for JEV findings (default "warn" — does not hard-block by default)
   threshold?: number;        // probability threshold 0..1 to count as a detection (default 0.8)
   timeoutMs?: number;        // request timeout (default 5000) — fail-open when exceeded
+  // question type sent to the server (default "noul"). Some gateways only accept "choice": the guard then sends
+  // yes/no options and reads probabilities.yes from the answer.
+  questionType?: "noul" | "choice";
 }
 
 export interface AiGuardConfig {

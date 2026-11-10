@@ -27,13 +27,13 @@ const QUESTIONS: { id: string; question: string; yes: string; no: string; descri
 ];
 
 // Payload per the System One / Decisions API contract (POST /v1/systemone):
-//   { model, state, questions: { <id>: { type: "noul", instructions, criteria? } } }
+//   { model, state, questions: { <id>: { type: "noul" | "choice", instructions, criteria } } }
 // "noul" = yes/no question; response: answers.<id> = { type: "noul", noul: <P(yes) 0..1> }.
-interface JevRequestQuestion {
-  type: "noul";
-  instructions: string;
-  criteria: { true: string; false: string };
-}
+// "choice" (for gateways that only accept choice) = options "yes"/"no"; response:
+//   answers.<id> = { type: "choice", choice, confidence, probabilities: { yes, no } } -> P(yes) = probabilities.yes.
+type JevRequestQuestion =
+  | { type: "noul"; instructions: string; criteria: { true: string; false: string } }
+  | { type: "choice"; instructions: string; criteria: { yes: string; no: string } };
 interface JevRequest {
   model: string;
   state: string;
@@ -63,11 +63,9 @@ export async function scanWithJev(
 
   const questions: Record<string, JevRequestQuestion> = {};
   for (const q of QUESTIONS) {
-    questions[q.id] = {
-      type: "noul",
-      instructions: q.question,
-      criteria: { true: q.yes, false: q.no },
-    };
+    questions[q.id] = cfg.questionType === "choice"
+      ? { type: "choice", instructions: q.question, criteria: { yes: q.yes, no: q.no } }
+      : { type: "noul", instructions: q.question, criteria: { true: q.yes, false: q.no } };
   }
   const body: JevRequest = { model: cfg.model || DEFAULT_MODEL, state: text, questions };
 
